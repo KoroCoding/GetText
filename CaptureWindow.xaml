@@ -1,0 +1,97 @@
+<Window x:Class="GetText.CaptureWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="GetText 読み取り枠"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" Topmost="True" ShowInTaskbar="False"
+        MinWidth="140" MinHeight="90"
+        FontFamily="Yu Gothic UI, Meiryo UI" FontSize="12">
+    <Window.Resources>
+        <SolidColorBrush x:Key="AccentBrush" Color="#2B6CB0"/>
+        <Style TargetType="Button" x:Key="BarButton">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="FontFamily" Value="Segoe UI Symbol"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#33FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="24"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ドラッグで移動するバー -->
+        <Border x:Name="TopBar" Grid.Row="0" Background="{DynamicResource AccentBrush}"
+                CornerRadius="4,4,0,0" MouseLeftButtonDown="TopBar_MouseLeftButtonDown"
+                ToolTip="ドラッグで移動 / 枠の縁をドラッグでサイズ変更">
+            <DockPanel LastChildFill="False">
+                <!-- ボタンを先に置く (狭い枠・長い題名でも、一時停止と終了のボタンが押せるように) -->
+                <Button DockPanel.Dock="Right" Style="{StaticResource BarButton}" Content="&#xE10A;"
+                        FontFamily="Segoe MDL2 Assets" FontSize="10" ToolTip="文字の読み取りを閉じる" Click="Close_Click"
+                        AutomationProperties.Name="文字の読み取りを閉じる"/>
+                <Button x:Name="PauseButton" DockPanel.Dock="Right" Style="{StaticResource BarButton}"
+                        Content="&#xE769;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                        ToolTip="一時停止" Click="Pause_Click" AutomationProperties.Name="一時停止"/>
+                <TextBlock x:Name="TitleText" TextTrimming="CharacterEllipsis" Text="GetText" Foreground="White" FontWeight="SemiBold"
+                           VerticalAlignment="Center" Margin="8,0,6,0"/>
+                <TextBlock x:Name="SizeText" TextTrimming="CharacterEllipsis" Foreground="#DDFFFFFF" VerticalAlignment="Center"/>
+            </DockPanel>
+        </Border>
+
+        <!-- 縁: 外側は半透明(つかみ代), 内側は実線。中は完全に透明でクリックが下に抜ける -->
+        <Border Grid.Row="1" x:Name="OuterFrame" BorderThickness="3,0,3,3" BorderBrush="#552B6CB0"
+                CornerRadius="0,0,4,4">
+            <Border x:Name="InnerFrame" BorderThickness="2,0,2,2" BorderBrush="{DynamicResource AccentBrush}">
+                <Grid x:Name="CaptureArea" Background="{x:Null}"/>
+            </Border>
+        </Border>
+
+        <!-- 右下のサイズ変更グリップ(見た目) -->
+        <Path Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,1,1"
+              Fill="{DynamicResource AccentBrush}" Data="M 14,0 L 14,14 L 0,14 Z" IsHitTestVisible="False"/>
+
+        <!-- 縁と四隅のサイズ変更つまみ。ほぼ透明(α=1)だがクリックは受け取る -->
+        <Grid Grid.RowSpan="2">
+            <Grid.Resources>
+                <Style TargetType="Thumb">
+                    <EventSetter Event="DragDelta" Handler="ResizeThumb_DragDelta"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Thumb">
+                                <Border Background="#01000000"/>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Grid.Resources>
+            <Thumb Tag="L" Width="8" HorizontalAlignment="Left" Margin="0,24,0,16" Cursor="SizeWE"/>
+            <Thumb Tag="R" Width="8" HorizontalAlignment="Right" Margin="0,24,0,16" Cursor="SizeWE"/>
+            <Thumb Tag="T" Height="6" VerticalAlignment="Top" Margin="16,0,72,0" Cursor="SizeNS"/>
+            <Thumb Tag="B" Height="8" VerticalAlignment="Bottom" Margin="16,0" Cursor="SizeNS"/>
+            <Thumb Tag="TL" Width="12" Height="6" HorizontalAlignment="Left" VerticalAlignment="Top" Cursor="SizeNWSE"/>
+            <Thumb Tag="TR" Width="6" Height="12" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,24,0,0" Cursor="SizeNESW"/>
+            <Thumb Tag="BL" Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Bottom" Cursor="SizeNESW"/>
+            <Thumb Tag="BR" Width="18" Height="18" HorizontalAlignment="Right" VerticalAlignment="Bottom" Cursor="SizeNWSE"
+                   ToolTip="ドラッグでサイズ変更"/>
+        </Grid>
+    </Grid>
+</Window>

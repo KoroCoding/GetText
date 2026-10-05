@@ -1,0 +1,184 @@
+<Window x:Class="GetText.TextWindow"
+        Icon="/Assets/app.ico"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="GetText"
+        MinWidth="360" MinHeight="260"
+        FontFamily="{StaticResource UiFont}" FontSize="13">
+    <Window.Resources>
+        <!-- 欄の右クリックメニュー -->
+        <ContextMenu x:Key="PaneMenu" Opened="PaneMenu_Opened">
+            <MenuItem Header="コピー" Command="ApplicationCommands.Copy" InputGestureText="Ctrl+C"/>
+            <MenuItem Header="すべて選択" Command="ApplicationCommands.SelectAll" InputGestureText="Ctrl+A"/>
+            <Separator/>
+            <MenuItem Header="全文をコピー" Click="MenuCopyAll_Click"/>
+            <MenuItem Header="ファイルに保存…" Click="MenuSave_Click"/>
+            <Separator/>
+            <MenuItem x:Name="ConvertMenu" Header="文字変換"/>
+        </ContextMenu>
+    </Window.Resources>
+
+    <Grid Margin="8,4,8,6">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 案内の帯 (両方出るときは縦に並べる。重ねると下の帯のボタンが押せない) -->
+        <StackPanel Grid.Row="1">
+        <!-- AI の機能 (高精度の読み取り・PC 内の翻訳・議事録) が入っていないときの案内 -->
+        <Border x:Name="SetupHint" Visibility="Collapsed" CornerRadius="6" BorderThickness="1" Padding="10,6,4,6" Margin="0,0,0,6"
+                Background="#1A0067C0" BorderBrush="#550067C0">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE711;" FontSize="11" VerticalAlignment="Top"
+                        Click="SetupHintClose_Click" ToolTip="今後は表示しない" AutomationProperties.Name="案内を閉じる"/>
+                <Button DockPanel.Dock="Right" Content="セットアップ" Padding="12,3" Margin="8,0,4,0" VerticalAlignment="Center"
+                        Click="SetupHintOpen_Click"/>
+                <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE946;" FontSize="14" Margin="0,1,10,0"
+                           VerticalAlignment="Top" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"/>
+                <TextBlock TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                           Text="今は Windows の標準の機能で読み取っています。「セットアップ」で AI の機能を入れると、読み取りが正確になり、PC の中だけで翻訳・議事録の文字起こしができます。"/>
+            </DockPanel>
+        </Border>
+
+        <!-- どのアプリでも効くキーが、ほかのアプリと重なって使えないときの案内 -->
+        <Border x:Name="HotkeyHint" Visibility="Collapsed" CornerRadius="6" BorderThickness="1" Padding="10,6,4,6" Margin="0,0,0,6"
+                Background="#1A9D5D00" BorderBrush="#559D5D00">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE711;" FontSize="11" VerticalAlignment="Top"
+                        Click="HotkeyHintClose_Click" ToolTip="閉じる" AutomationProperties.Name="案内を閉じる"/>
+                <Button DockPanel.Dock="Right" Content="キーを変える" Padding="12,3" Margin="8,0,4,0" VerticalAlignment="Center"
+                        Click="HotkeyHintOpen_Click"/>
+                <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="14" Margin="0,1,10,0"
+                           VerticalAlignment="Top" Foreground="#9D5D00"/>
+                <TextBlock x:Name="HotkeyHintText" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+            </DockPanel>
+        </Border>
+        </StackPanel>
+
+        <!-- 操作バー -->
+        <DockPanel x:Name="Toolbar" Grid.Row="0" Margin="0,0,0,6" LastChildFill="False">
+            <Button DockPanel.Dock="Right" Style="{StaticResource CommandPush}" Click="Settings_Click"
+                    ToolTip="設定 (Ctrl+,)" AutomationProperties.Name="設定">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE713;"/>
+                    <TextBlock Text="設定" Margin="6,0,0,0" VerticalAlignment="Center" Tag="Label"/>
+                </StackPanel>
+            </Button>
+
+            <ToggleButton x:Name="PauseToggle" Style="{StaticResource CommandToggle}" Click="PauseToggle_Click"
+                          ToolTip="自動読み取りを一時停止 / 再開 (Ctrl+P ・ どこからでも Ctrl+Alt+P)" AutomationProperties.Name="一時停止">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="PauseIcon" Style="{StaticResource Icon}" Text="&#xE769;"/>
+                    <TextBlock x:Name="PauseLabel" Text="一時停止" Margin="6,0,0,0" VerticalAlignment="Center" Tag="Label"/>
+                </StackPanel>
+            </ToggleButton>
+            <Button x:Name="RefreshButton" Style="{StaticResource CommandPush}" Click="Refresh_Click"
+                    ToolTip="枠の中を今すぐ読み取る (F5 ・ どこからでも Ctrl+Alt+R)" AutomationProperties.Name="今すぐ読み取る">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;"/>
+                    <TextBlock Text="今すぐ読取" Margin="6,0,0,0" VerticalAlignment="Center" Tag="Label"/>
+                </StackPanel>
+            </Button>
+            <Rectangle Width="1" Margin="6,6" Fill="{DynamicResource DividerStrokeColorDefaultBrush}"/>
+            <ToggleButton x:Name="AccumulateToggle" Style="{StaticResource CommandToggle}" Click="AccumulateToggle_Click"
+                          ToolTip="スクロールしながら読んだ内容を重複なしでつなげて集める (長い文書の取り込み用)" AutomationProperties.Name="蓄積">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE81C;"/>
+                    <TextBlock Text="蓄積" Margin="6,0,0,0" VerticalAlignment="Center" Tag="Label"/>
+                </StackPanel>
+            </ToggleButton>
+            <Button x:Name="ClearButton" Style="{StaticResource CommandPush}" Click="Clear_Click"
+                    ToolTip="蓄積した内容を消して集め直す" AutomationProperties.Name="蓄積をクリア" Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;"/>
+                    <TextBlock Text="クリア" Margin="6,0,0,0" VerticalAlignment="Center" Tag="Label"/>
+                </StackPanel>
+            </Button>
+            <Rectangle Width="1" Margin="6,6" Fill="{DynamicResource DividerStrokeColorDefaultBrush}"/>
+            <Button Style="{StaticResource CommandPush}" Click="Minutes_Click"
+                    ToolTip="会議アプリなどの音声を文字起こしして、時刻と話者つきの議事録を作る" AutomationProperties.Name="議事録">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE720;"/>
+                    <TextBlock Text="議事録" Margin="6,0,0,0" VerticalAlignment="Center" Tag="Label"/>
+                </StackPanel>
+            </Button>
+        </DockPanel>
+
+        <!-- 原文と日本語訳 (配置は設定で下 / 右を切り替える) -->
+        <Grid x:Name="PaneGrid" Grid.Row="2">
+            <Grid.RowDefinitions>
+                <RowDefinition/>
+                <RowDefinition/>
+                <RowDefinition/>
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition/>
+                <ColumnDefinition/>
+            </Grid.ColumnDefinitions>
+
+            <Border x:Name="OcrCard" Style="{StaticResource Card}">
+                <DockPanel>
+                    <DockPanel DockPanel.Dock="Top" Margin="12,6,4,0">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE74E;"
+                                Click="SaveOcr_Click" ToolTip="ファイルに保存" AutomationProperties.Name="原文をファイルに保存"/>
+                        <Button x:Name="CopyOcrButton" DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE8C8;"
+                                Click="CopyOcr_Click" AutomationProperties.Name="原文をコピー"
+                                ToolTip="コピー: 選択範囲があればその部分、なければ全文 (Ctrl+Shift+C ・ どこからでも Ctrl+Alt+C)"/>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="原文"/>
+                        <TextBlock x:Name="OcrNote" Style="{StaticResource Caption}" Margin="10,0,6,0"/>
+                    </DockPanel>
+                    <Grid>
+                        <TextBox x:Name="ResultBox" Style="{StaticResource ResultText}" AutomationProperties.Name="読み取った原文"
+                                 ContextMenu="{StaticResource PaneMenu}"
+                                 SelectionChanged="Box_SelectionChanged" PreviewMouseWheel="Box_PreviewMouseWheel"/>
+                        <TextBlock x:Name="OcrPlaceholder" Style="{StaticResource Caption}" Margin="14,6,14,0"
+                                   VerticalAlignment="Top" TextWrapping="Wrap" TextTrimming="None" IsHitTestVisible="False"
+                                   Text="青い枠を読み取りたい文字の上に重ねてください。枠の中の文字がここに表示されます。&#x0a;枠は上のバーで移動、縁や角でサイズ変更できます。"/>
+                    </Grid>
+                </DockPanel>
+            </Border>
+
+            <GridSplitter x:Name="Splitter" Background="Transparent" HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch" ToolTip="ドラッグで大きさを調整"/>
+
+            <Border x:Name="TranslationCard" Style="{StaticResource Card}">
+                <DockPanel>
+                    <DockPanel DockPanel.Dock="Top" Margin="12,6,4,0">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE74E;"
+                                Click="SaveTranslation_Click" ToolTip="ファイルに保存" AutomationProperties.Name="日本語訳をファイルに保存"/>
+                        <Button x:Name="CopyTranslationButton" DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE8C8;"
+                                Click="CopyTranslation_Click" AutomationProperties.Name="日本語訳をコピー"
+                                ToolTip="コピー: 選択範囲があればその部分、なければ全文 (Ctrl+Shift+T ・ どこからでも Ctrl+Alt+T)"/>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="日本語訳"/>
+                        <TextBlock x:Name="TranslationNote" Style="{StaticResource Caption}" Margin="10,0,6,0"/>
+                    </DockPanel>
+                    <Grid>
+                        <TextBox x:Name="TranslationBox" Style="{StaticResource ResultText}" AutomationProperties.Name="日本語訳"
+                                 ContextMenu="{StaticResource PaneMenu}"
+                                 SelectionChanged="Box_SelectionChanged" PreviewMouseWheel="Box_PreviewMouseWheel"/>
+                        <TextBlock x:Name="TranslationPlaceholder" Style="{StaticResource Caption}" Margin="14,6,14,0"
+                                   VerticalAlignment="Top" TextWrapping="Wrap" TextTrimming="None" IsHitTestVisible="False"
+                                   Text="英語・中国語・韓国語などの文があると、ここに日本語訳が表示されます。"/>
+                    </Grid>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- ステータスバー -->
+        <DockPanel Grid.Row="3" Margin="4,6,0,0">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Border Style="{StaticResource Chip}" ToolTip="OCR エンジン">
+                    <TextBlock x:Name="OcrChip" Style="{StaticResource Caption}"/>
+                </Border>
+                <Border x:Name="TranslationChipBorder" Style="{StaticResource Chip}" ToolTip="翻訳エンジン">
+                    <TextBlock x:Name="TranslationChip" Style="{StaticResource Caption}"/>
+                </Border>
+            </StackPanel>
+            <TextBlock x:Name="StatusText" Style="{StaticResource Caption}"/>
+        </DockPanel>
+    </Grid>
+</Window>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>GetText</string>
+    <key>CFBundleDisplayName</key>
+    <string>GetText</string>
+    <key>CFBundleIdentifier</key>
+    <string>app.gettext.GetText</string>
+    <key>CFBundleExecutable</key>
+    <string>GetText</string>
+    <key>CFBundleIconFile</key>
+    <string>GetText</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>__VERSION__</string>
+    <key>CFBundleVersion</key>
+    <string>__VERSION__</string>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>ja</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.productivity</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>議事録に自分の声 (マイク) も入れるために使います。音声は Mac の外に送りません。</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>選んだアプリ (会議アプリなど) の音を文字起こしするために使います。音声は Mac の外に送りません。</string>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>読み取り枠の中の文字を読み取るため、また選んだアプリの音を取り込むために使います。</string>
+</dict>
+</plist>

@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <AssemblyName>GetText</AssemblyName>
+    <RootNamespace>GetText</RootNamespace>
+    <Version>1.0.0</Version>
+    <!-- 実行ファイルに入れる情報 (コード署名の条件: 製品名と版を入れる) -->
+    <Product>GetText</Product>
+    <AssemblyTitle>GetText</AssemblyTitle>
+    <Description>画面の文字の読み取り・翻訳、会議の議事録、画面の録画</Description>
+    <Copyright>Copyright (C) 2026 KoroCoding. GPL-3.0-or-later.</Copyright>
+    <!-- Fluent テーマ (ThemeMode) は .NET 9 では試験的機能扱い -->
+    <NoWarn>$(NoWarn);WPF0001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- テストプロジェクトはアプリ本体に含めない -->
+    <Compile Remove="tests\**" />
+    <None Remove="tests\**" />
+    <Page Remove="tests\**" />
+    <!-- Mac 版 (mac フォルダー、Avalonia) は別のプロジェクト -->
+    <Compile Remove="mac\**" />
+    <None Remove="mac\**" />
+    <Page Remove="mac\**" />
+    <InternalsVisibleTo Include="GetText.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="offline\*.py;offline\*.ps1;offline\*.bat" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>

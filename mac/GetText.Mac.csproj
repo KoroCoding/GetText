@@ -1,0 +1,81 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    GetText の Mac 版 (Avalonia)。Windows 版 (../GetText.csproj、WPF) とは別のアプリで、
+    議事録のデータ・文字起こしの通信・設定・文字変換・翻訳などは Windows 版のファイルをそのまま使う (Shared\)。
+    Mac の機能 (画面と音の取り込み・文字認識・ショートカット・キーチェーン) は helper/ の Swift のプログラムが受け持つ。
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>GetText</AssemblyName>
+    <RootNamespace>GetText</RootNamespace>
+    <DefineConstants>$(DefineConstants);GETTEXT_MAC</DefineConstants>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationIcon>..\Assets\app.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <!-- 実行ファイルに入れる情報 (コード署名の条件: 製品名と版を入れる) -->
+    <Product>GetText</Product>
+    <AssemblyTitle>GetText</AssemblyTitle>
+    <Description>画面の文字の読み取り・翻訳、会議の議事録、画面の録画</Description>
+    <Copyright>Copyright (C) 2026 KoroCoding. GPL-3.0-or-later.</Copyright>
+    <!-- 議事録のテスト用の窓など、Windows で動かして確かめるときにも使う -->
+    <RuntimeIdentifiers>osx-arm64;osx-x64;win-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests\**" />
+    <None Remove="tests\**" />
+    <AvaloniaXaml Remove="tests\**" />
+    <Compile Remove="helper\**;packaging\**;bin\**;obj\**" />
+    <InternalsVisibleTo Include="GetText.Mac.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Headless" Version="11.3.22" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+  </ItemGroup>
+
+  <!-- Windows 版と共有するファイル (OS に依存しないもの) -->
+  <ItemGroup>
+    <Compile Include="..\AudioSource.cs" Link="Shared\AudioSource.cs" />
+    <Compile Include="..\AppSettings.cs" Link="Shared\AppSettings.cs" />
+    <Compile Include="..\SettingsOptions.cs" Link="Shared\SettingsOptions.cs" />
+    <Compile Include="..\MinutesDocument.cs" Link="Shared\MinutesDocument.cs" />
+    <Compile Include="..\MinutesFile.cs" Link="Shared\MinutesFile.cs" />
+    <Compile Include="..\MinutesProject.cs" Link="Shared\MinutesProject.cs" />
+    <Compile Include="..\AtomicFile.cs" Link="Shared\AtomicFile.cs" />
+    <Compile Include="..\RecentMinutes.cs" Link="Shared\RecentMinutes.cs" />
+    <Compile Include="..\DocxWriter.cs" Link="Shared\DocxWriter.cs" />
+    <Compile Include="..\Fillers.cs" Link="Shared\Fillers.cs" />
+    <Compile Include="..\TextScript.cs" Link="Shared\TextScript.cs" />
+    <Compile Include="..\TextConverter.cs" Link="Shared\TextConverter.cs" />
+    <Compile Include="..\TextAccumulator.cs" Link="Shared\TextAccumulator.cs" />
+    <Compile Include="..\OcrDocument.cs" Link="Shared\OcrDocument.cs" />
+    <Compile Include="..\JapaneseCorrector.cs" Link="Shared\JapaneseCorrector.cs" />
+    <Compile Include="..\PythonWorker.cs" Link="Shared\PythonWorker.cs" />
+    <Compile Include="..\TranscriptionService.cs" Link="Shared\TranscriptionService.cs" />
+    <Compile Include="..\SessionRecorder.cs" Link="Shared\SessionRecorder.cs" />
+    <Compile Include="..\Translator.cs" Link="Shared\Translator.cs" />
+    <Compile Include="..\LocalTranslator.cs" Link="Shared\LocalTranslator.cs" />
+    <Compile Include="..\AiOcr.cs" Link="Shared\AiOcr.cs" />
+    <Compile Include="..\MinutesSelfTest.cs" Link="Shared\MinutesSelfTest.cs" />
+  </ItemGroup>
+
+  <!-- 文字起こし・翻訳・AI の文字認識の Python のスクリプト (Windows 版と同じもの) -->
+  <ItemGroup>
+    <None Include="..\offline\*.py" Link="offline\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="packaging\setup_mac.sh" Link="setup_mac.sh" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+</Project>

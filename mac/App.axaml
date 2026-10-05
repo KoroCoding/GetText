@@ -1,0 +1,143 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GetText.App"
+             Name="GetText"
+             RequestedThemeVariant="Default">
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- 画面の文字 (Mac はヒラギノ。Windows で試すときは游ゴシック) -->
+            <FontFamily x:Key="UiFont">Hiragino Sans, Hiragino Kaku Gothic ProN, .AppleSystemUIFont, Yu Gothic UI, Meiryo UI, Segoe UI</FontFamily>
+            <FontFamily x:Key="MonoFont">Menlo, SF Mono, Consolas, Yu Gothic UI</FontFamily>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="Text1" Color="#E4000000"/>
+                    <SolidColorBrush x:Key="Text2" Color="#9E000000"/>
+                    <SolidColorBrush x:Key="Text3" Color="#72000000"/>
+                    <SolidColorBrush x:Key="AppBg" Color="#F3F3F3"/>
+                    <SolidColorBrush x:Key="CardBg" Color="#FBFBFB"/>
+                    <SolidColorBrush x:Key="CardStroke" Color="#14000000"/>
+                    <SolidColorBrush x:Key="Subtle" Color="#09000000"/>
+                    <SolidColorBrush x:Key="Subtle2" Color="#06000000"/>
+                    <SolidColorBrush x:Key="Divider" Color="#14000000"/>
+                    <SolidColorBrush x:Key="Smoke" Color="#4D000000"/>
+                    <SolidColorBrush x:Key="InputActive" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="Accent" Color="#005FB8"/>
+                    <SolidColorBrush x:Key="AccentText" Color="#003E92"/>
+                    <SolidColorBrush x:Key="OnAccent" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="Success" Color="#0F7B0F"/>
+                    <SolidColorBrush x:Key="Critical" Color="#C42B1C"/>
+                    <SolidColorBrush x:Key="PopupBg" Color="#F9F9F9"/>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="Text1" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="Text2" Color="#C5FFFFFF"/>
+                    <SolidColorBrush x:Key="Text3" Color="#87FFFFFF"/>
+                    <SolidColorBrush x:Key="AppBg" Color="#202020"/>
+                    <SolidColorBrush x:Key="CardBg" Color="#2B2B2B"/>
+                    <SolidColorBrush x:Key="CardStroke" Color="#19000000"/>
+                    <SolidColorBrush x:Key="Subtle" Color="#0FFFFFFF"/>
+                    <SolidColorBrush x:Key="Subtle2" Color="#0AFFFFFF"/>
+                    <SolidColorBrush x:Key="Divider" Color="#15FFFFFF"/>
+                    <SolidColorBrush x:Key="Smoke" Color="#66000000"/>
+                    <SolidColorBrush x:Key="InputActive" Color="#1E1E1E"/>
+                    <SolidColorBrush x:Key="Accent" Color="#60CDFF"/>
+                    <SolidColorBrush x:Key="AccentText" Color="#99EBFF"/>
+                    <SolidColorBrush x:Key="OnAccent" Color="#000000"/>
+                    <SolidColorBrush x:Key="Success" Color="#6CCB5F"/>
+                    <SolidColorBrush x:Key="Critical" Color="#FF99A4"/>
+                    <SolidColorBrush x:Key="PopupBg" Color="#2C2C2C"/>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+
+        <Style Selector="Window">
+            <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Background" Value="{DynamicResource AppBg}"/>
+        </Style>
+
+        <!-- カード -->
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="{DynamicResource CardBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStroke}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+        </Style>
+        <Style Selector="TextBlock.title">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="{DynamicResource Text1}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.caption">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource Text2}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+        <Style Selector="TextBlock.icon">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- 操作バーのボタン: 背景なし・マウスを乗せると薄く色が付く -->
+        <Style Selector=":is(Button).command">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Margin" Value="0,0,2,0"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="{DynamicResource Text1}"/>
+        </Style>
+        <Style Selector=":is(Button).command:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Subtle}"/>
+        </Style>
+        <Style Selector="ToggleButton.command:checked /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Accent}"/>
+            <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
+        </Style>
+        <Style Selector="Button.icon">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="7,4"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Foreground" Value="{DynamicResource Text2}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.icon:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Subtle}"/>
+        </Style>
+
+        <!-- 結果を表示する読み取り専用の欄 (枠線なし) -->
+        <Style Selector="TextBox.result">
+            <Setter Property="IsReadOnly" Value="True"/>
+            <Setter Property="AcceptsReturn" Value="True"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="12,4,6,8"/>
+        </Style>
+        <Style Selector="TextBox.result:focus /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="TextBox.result:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+
+        <Style Selector="TextBlock.settingHeader">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Foreground" Value="{DynamicResource Text1}"/>
+            <Setter Property="Margin" Value="0,14,0,6"/>
+        </Style>
+    </Application.Styles>
+</Application>

@@ -1,0 +1,564 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:GetText"
+        x:Class="GetText.MinutesWindow"
+        Title="GetText — 議事録" Width="900" Height="640" MinWidth="600" MinHeight="420"
+        Icon="avares://GetText/Assets/app.ico">
+    <Window.Resources>
+        <!-- 発言の文字の大きさ (設定 → 表示、または ⌘+ / ⌘- で変える) -->
+        <x:Double x:Key="EntryFontSize">14</x:Double>
+        <x:Double x:Key="EntrySmallFontSize">13</x:Double>
+        <x:Double x:Key="EntryTimeWidth">70</x:Double>
+    </Window.Resources>
+
+    <Window.Styles>
+        <!-- 書き直せる本文 (枠線なし) -->
+        <Style Selector="TextBox.entry">
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="AcceptsReturn" Value="False"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="FontSize" Value="{DynamicResource EntryFontSize}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Text1}"/>
+            <Setter Property="ContextFlyout" Value="{x:Null}"/>
+        </Style>
+        <Style Selector="TextBox.entry /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="4"/>
+        </Style>
+        <Style Selector="TextBox.entry:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="TextBox.entry:focus /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="{DynamicResource InputActive}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="TextBox.entry:focus">
+            <Setter Property="Foreground" Value="{DynamicResource Text1}"/>
+        </Style>
+        <!-- メモ・★ の行の色 (背景を直接書くとこの指定が効かなくなるので、ここで決める) -->
+        <Style Selector="Grid.row">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="Grid.row.note">
+            <Setter Property="Background" Value="#14808080"/>
+        </Style>
+        <Style Selector="Grid.row.marked">
+            <Setter Property="Background" Value="#1FE8A200"/>
+        </Style>
+        <!-- ★: 付けた発言・マウスを載せた発言・選んだ発言だけに見せる -->
+        <Style Selector="ToggleButton.mark">
+            <Setter Property="Opacity" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="2"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Content" Value="☆"/>
+            <Setter Property="Foreground" Value="{DynamicResource Text3}"/>
+            <Setter Property="ToolTip.Tip" Value="重要な発言に ★ を付ける / 外す (⌘B)。保存にも入り、要約で重視されます"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                        <TextBlock Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" FontSize="15"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="ToggleButton.mark:checked">
+            <Setter Property="Opacity" Value="1"/>
+            <Setter Property="Content" Value="★"/>
+            <Setter Property="Foreground" Value="#E8A200"/>
+        </Style>
+        <Style Selector="ListBoxItem:pointerover ToggleButton.mark, ListBoxItem:selected ToggleButton.mark">
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+        <Style Selector="ListBoxItem">
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="Margin" Value="0"/>
+        </Style>
+        <!-- 準備中の段階 -->
+        <Style Selector="TextBlock.stepIcon">
+            <Setter Property="Foreground" Value="{DynamicResource Text3}"/>
+        </Style>
+        <Style Selector="TextBlock.stepIcon.active">
+            <Setter Property="Foreground" Value="{DynamicResource AccentText}"/>
+            <Style.Animations>
+                <Animation Duration="0:0:1.2" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%"><Setter Property="RotateTransform.Angle" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="RotateTransform.Angle" Value="360"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <Style Selector="TextBlock.stepIcon.done">
+            <Setter Property="Foreground" Value="{DynamicResource Success}"/>
+        </Style>
+        <Style Selector="TextBlock.stepIcon.failed">
+            <Setter Property="Foreground" Value="{DynamicResource Critical}"/>
+        </Style>
+        <Style Selector="TextBlock.stepTitle">
+            <Setter Property="Foreground" Value="{DynamicResource Text3}"/>
+        </Style>
+        <Style Selector="TextBlock.stepTitle.active">
+            <Setter Property="Foreground" Value="{DynamicResource Text1}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="TextBlock.stepTitle.done">
+            <Setter Property="Foreground" Value="{DynamicResource Text2}"/>
+        </Style>
+        <Style Selector="TextBlock.stepTitle.failed">
+            <Setter Property="Foreground" Value="{DynamicResource Text1}"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="10,6,10,8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 取り込み元と記録ボタン -->
+        <Border Grid.Row="0" Classes="card" Padding="12,10" Margin="0,0,0,8">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                    <TextBlock Classes="caption" Text="文字起こしするアプリの音を選ぶ (🔊 = いま音を出しているアプリ)"/>
+                    <DockPanel Margin="0,4,0,0">
+                        <Button DockPanel.Dock="Right" Classes="icon" Content="⟳" Margin="4,0,0,0"
+                                Click="RefreshWindows_Click" ToolTip.Tip="ウィンドウの一覧を更新"/>
+                        <ComboBox x:Name="WindowBox" HorizontalAlignment="Stretch"/>
+                    </DockPanel>
+                    <WrapPanel Margin="0,8,0,0">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,16,4" VerticalAlignment="Center"
+                                    ToolTip.Tip="文字にする言語。1 つ選ぶとその言語として、複数選ぶと発言ごとにその中から判定します (日本語は kotoba-whisper、それ以外は Whisper large-v3 turbo)">
+                            <TextBlock Classes="caption" Text="言語" Margin="0,0,6,0"/>
+                            <Button x:Name="LanguageButton" MinWidth="150" Padding="10,4" HorizontalContentAlignment="Stretch">
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Right" Text="▾" FontSize="10" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="LanguageLabel" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="220"/>
+                                </DockPanel>
+                                <Button.Flyout>
+                                    <Flyout Placement="BottomEdgeAlignedLeft">
+                                        <StackPanel Margin="2">
+                                            <TextBlock Classes="caption" Text="文字にする言語 (複数選ぶと発言ごとに判定)" Margin="0,0,0,6"/>
+                                            <ItemsControl x:Name="LanguageList">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <CheckBox Content="{Binding Label}" IsChecked="{Binding IsSelected}" Margin="0,1"
+                                                                  Click="LanguageCheck_Click"/>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+                        </StackPanel>
+                        <Button x:Name="TermsButton" Padding="10,4" Margin="0,0,16,4" Click="Terms_Click"
+                                ToolTip.Tip="会議に出てくる人名・社名・専門用語を登録すると、その表記で書きます (読みが同じなら直す・置き換えの決まりも書ける)">
+                            <TextBlock x:Name="TermsLabel" Text="用語"/>
+                        </Button>
+                        <CheckBox x:Name="MicCheck" Content="マイク (自分の声) も入れる" IsChecked="True" Margin="0,0,16,4"
+                                  ToolTip.Tip="自分の声もマイクから取り込み、「自分」として議事録に入れます"/>
+                        <!-- あまり変えない設定はまとめておく (押すと開く) -->
+                        <Button x:Name="OptionsButton" Padding="10,4" Margin="0,0,16,4" ToolTip.Tip="速さ・文脈による補正・音声の保存などの設定">
+                            <TextBlock Text="⚙ 詳細 ▾"/>
+                            <Button.Flyout>
+                                <Flyout Placement="BottomEdgeAlignedLeft">
+                                    <StackPanel Width="400" Margin="4">
+                                        <TextBlock Classes="title" Text="速さ"/>
+                                        <ComboBox x:Name="SpeedBox" Margin="0,6,0,2" HorizontalAlignment="Stretch" SelectionChanged="SpeedBox_SelectionChanged"/>
+                                        <TextBlock x:Name="SpeedNote" Classes="caption" TextWrapping="Wrap" TextTrimming="None" Margin="0,0,0,12"/>
+                                        <CheckBox x:Name="CorrectCheck" Content="文脈で聞き間違いを補正" IsChecked="True" Click="Correct_Click"/>
+                                        <TextBlock Classes="caption" TextWrapping="Wrap" TextTrimming="None" Margin="28,0,0,10"
+                                                   Text="前後の発言から、同音異義語などの聞き間違いを AI が直します。重いので、文字になるのが遅れることがあります。"/>
+                                        <CheckBox x:Name="SaveAudioCheck" Content="会議の音声も保存する" IsChecked="True" Click="SaveAudio_Click"/>
+                                        <TextBlock Classes="caption" TextWrapping="Wrap" TextTrimming="None" Margin="28,0,0,10"
+                                                   Text="発言の時刻をクリックして聞き直せます (1 時間で約 15MB。Mac の外には送りません)。"/>
+                                        <CheckBox x:Name="RecordVideoCheck" Content="会議の画面も録画する" Click="RecordVideo_Click"/>
+                                        <TextBlock Classes="caption" TextWrapping="Wrap" TextTrimming="None" Margin="28,0,0,4"
+                                                   Text="選んだアプリのウィンドウ (「すべての音」なら画面全体) を、そのアプリの音も入れて MP4 に録画します (マイクの声は動画には入りません)。保存先は「画面の録画」と同じです。"/>
+                                        <CheckBox x:Name="SubtitleVideoCheck" Content="字幕つきの動画も作る" Margin="28,0,0,0" Click="RecordVideo_Click"/>
+                                        <TextBlock Classes="caption" TextWrapping="Wrap" TextTrimming="None" Margin="56,0,0,10"
+                                                   Text="記録を止めたあと、発言を話者の名前つきの字幕にして焼き込んだ動画を作ります。字幕のファイル (.srt) も録画の隣に置きます。後で直した発言は「保存…」→「字幕つきの動画」で作り直せます。"/>
+                                        <CheckBox x:Name="HideOcrCheck" Content="議事録を開いている間、読み取りの画面を隠す" Click="HideOcr_Click"/>
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,4" ToolTip.Tip="ウィンドウの音量">
+                            <TextBlock Classes="caption" Text="相手" Margin="0,0,6,0"/>
+                            <ProgressBar x:Name="WindowLevel" Width="70" MinWidth="0" Height="4" MinHeight="4" Maximum="1" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,4" ToolTip.Tip="マイクの音量">
+                            <TextBlock Classes="caption" Text="自分" Margin="0,0,6,0"/>
+                            <ProgressBar x:Name="MicLevel" Width="70" MinWidth="0" Height="4" MinHeight="4" Maximum="1" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </WrapPanel>
+                </StackPanel>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
+                    <Button x:Name="RecordButton" Classes="accent" MinWidth="150" Padding="16,8" Click="Record_Click"
+                            HorizontalContentAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="RecordIcon" Classes="icon" Text="●"/>
+                            <TextBlock x:Name="RecordLabel" Text="記録を開始" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="FileButton" MinWidth="150" Padding="12,5" Margin="0,6,0,0" Click="File_Click"
+                            HorizontalContentAlignment="Center"
+                            ToolTip.Tip="MP4 などの動画や、MP3・WAV などの音声ファイルを、時刻と話者つきで文字起こしします">
+                        <TextBlock x:Name="FileLabel" Text="ファイルから…"/>
+                    </Button>
+                    <ProgressBar x:Name="FileProgress" Height="4" MinHeight="4" Maximum="1" Margin="0,6,0,0" IsVisible="False"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,0">
+                        <Border x:Name="StateBadge" CornerRadius="9" Padding="8,1" Background="#33808080" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse x:Name="StateDot" Width="7" Height="7" Fill="#808080" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="StateText" Text="準備中" FontSize="11" Margin="5,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource Text1}"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock x:Name="ElapsedText" Classes="caption" Margin="8,0,0,0" FontFamily="{StaticResource MonoFont}" Text="00:00:00"/>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 発言と話者 -->
+        <Grid x:Name="BodyGrid" Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="320"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="220" MinWidth="170"/>
+            </Grid.ColumnDefinitions>
+            <!-- 発言と話者の欄の境目: ドラッグで話者の欄の幅を変える (ダブルクリックで元の幅) -->
+            <GridSplitter x:Name="SpeakerSplitter" Grid.Column="1" ResizeDirection="Columns" Background="Transparent" Focusable="False"
+                          DragCompleted="SpeakerSplitter_DragCompleted" DoubleTapped="SpeakerSplitter_DoubleTapped"
+                          ToolTip.Tip="ドラッグで話者の欄の幅を変えます (ダブルクリックで元の幅)"/>
+            <Border Grid.Column="0" Classes="card">
+                <DockPanel>
+                    <!-- メモ: 書いて Enter で、今の時刻に差し込む (⌘M でここへ) -->
+                    <Border DockPanel.Dock="Bottom" Padding="10,6,10,8" BorderBrush="{DynamicResource Divider}" BorderThickness="0,1,0,0">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Classes="command" Margin="6,0,0,0" Click="AddMemo_Click"
+                                    ToolTip.Tip="メモを今の時刻に差し込みます (Enter でも可)">
+                                <TextBlock Text="＋ メモ"/>
+                            </Button>
+                            <TextBox x:Name="MemoBox" Watermark="📝 メモを書いて Enter (⌘M) ・ 今の時刻に差し込みます" KeyDown="MemoBox_KeyDown"
+                                     ToolTip.Tip="会議中のメモ (「ここで資料を共有」など)。Enter で今の時刻に差し込みます。保存・要約にも入ります"/>
+                        </DockPanel>
+                    </Border>
+                    <!-- 話している途中の暫定の文字 (確定すると上の一覧に入る) -->
+                    <!-- 話している途中の暫定の文字。記録中は高さを変えずに 1 行ずつ出し、長いときは終わりの方を見せる
+                         (話すにつれて高さが変わると、一覧の最新の発言が下に隠れて重なって見えるため) -->
+                    <Border x:Name="PartialPanel" DockPanel.Dock="Bottom" IsVisible="False" Padding="10,5,12,5" Margin="8,2,8,6"
+                            CornerRadius="6" Background="{DynamicResource Subtle}"
+                            ToolTip.Tip="話している途中の文字です。話し終わると上の一覧に確定して入ります">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Left" CornerRadius="4" Padding="6,1" Margin="0,1,10,0" VerticalAlignment="Top"
+                                    Background="{DynamicResource Subtle}">
+                                <TextBlock Classes="caption" Text="確定前" FontSize="11"/>
+                            </Border>
+                            <StackPanel>
+                                <DockPanel x:Name="WinPartialRow" IsVisible="False">
+                                    <TextBlock x:Name="WinPartialName" DockPanel.Dock="Left" Classes="caption" FontStyle="Italic"
+                                               FontSize="{DynamicResource EntrySmallFontSize}" MaxWidth="160" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="WinPartial" Classes="caption" FontStyle="Italic" FontSize="{DynamicResource EntrySmallFontSize}"
+                                               TextWrapping="NoWrap" TextTrimming="PrefixCharacterEllipsis"/>
+                                </DockPanel>
+                                <DockPanel x:Name="MicPartialRow" IsVisible="False">
+                                    <TextBlock x:Name="MicPartialName" DockPanel.Dock="Left" Classes="caption" FontStyle="Italic"
+                                               FontSize="{DynamicResource EntrySmallFontSize}" MaxWidth="160" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="MicPartial" Classes="caption" FontStyle="Italic" FontSize="{DynamicResource EntrySmallFontSize}"
+                                               TextWrapping="NoWrap" TextTrimming="PrefixCharacterEllipsis"/>
+                                </DockPanel>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+                    <!-- 発言の検索 (⌘F) -->
+                    <DockPanel DockPanel.Dock="Top" Margin="10,8,10,2">
+                        <ToggleButton x:Name="MarkedOnlyToggle" DockPanel.Dock="Right" Classes="command" Margin="6,0,0,0"
+                                      Click="MarkedOnly_Click" ToolTip.Tip="★ を付けた重要な発言だけを表示します">
+                            <TextBlock x:Name="MarkedCount" Text="★ 重要"/>
+                        </ToggleButton>
+                        <TextBlock x:Name="SearchCount" DockPanel.Dock="Right" Classes="caption" Margin="8,0,0,0"/>
+                        <TextBox x:Name="SearchBox" Watermark="🔍 発言を検索 (⌘F)" TextChanged="SearchBox_TextChanged" KeyDown="SearchBox_KeyDown"
+                                 ToolTip.Tip="発言・日本語訳・話者名から探します (⌘F)。Esc で解除"/>
+                    </DockPanel>
+                    <!-- AI の要約 (概要・決定事項・やること・主な論点)。書き直せる -->
+                    <Border x:Name="SummaryPanel" DockPanel.Dock="Top" IsVisible="False" Margin="10,6,10,2" Padding="12,6,6,8"
+                            CornerRadius="6" Background="{DynamicResource Subtle}">
+                        <DockPanel>
+                            <DockPanel DockPanel.Dock="Top">
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                    <Button x:Name="SummaryCancelButton" Classes="icon" Content="✕" IsVisible="False"
+                                            Click="SummaryCancel_Click" ToolTip.Tip="要約を作るのをやめる"/>
+                                    <Button x:Name="SummaryRedoButton" Classes="icon" Content="⟳"
+                                            Click="Summarize_Click" ToolTip.Tip="今の発言で要約を作り直す"/>
+                                    <Button x:Name="SummaryEditButton" Classes="icon" Content="✎"
+                                            Click="SummaryEdit_Click" ToolTip.Tip="要約を書き直す / 書き直しを終える"/>
+                                    <Button x:Name="SummaryCopyButton" Classes="icon" Content="⧉"
+                                            Click="CopySummary_Click" ToolTip.Tip="要約をコピー"/>
+                                    <Button x:Name="SummaryFoldButton" Classes="icon" Content="▴"
+                                            Click="SummaryFold_Click" ToolTip.Tip="要約をたたむ / 開く"/>
+                                </StackPanel>
+                                <TextBlock Text="≡" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource AccentText}"/>
+                                <TextBlock Classes="title" Text="要約"/>
+                                <TextBlock x:Name="SummaryState" Classes="caption" Margin="10,0,0,0"/>
+                            </DockPanel>
+                            <Grid x:Name="SummaryBody" Margin="0,4,0,0">
+                                <ScrollViewer x:Name="SummaryViewScroll" MaxHeight="190" VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled" Padding="2,0,8,4">
+                                    <StackPanel x:Name="SummaryView"/>
+                                </ScrollViewer>
+                                <TextBox x:Name="SummaryBox" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="190" IsVisible="False"
+                                         FontSize="{DynamicResource EntrySmallFontSize}"
+                                         TextChanged="SummaryBox_TextChanged" LostFocus="SummaryBox_LostFocus"
+                                         ToolTip.Tip="Markdown で書き直せます (### 見出し、- 箇条書き)。保存・コピーにも反映されます"/>
+                                <ProgressBar x:Name="SummaryProgress" VerticalAlignment="Bottom" Height="3" MinHeight="3" Maximum="1"
+                                             Margin="6,0,6,2" IsVisible="False"/>
+                            </Grid>
+                        </DockPanel>
+                    </Border>
+                    <Grid>
+                        <ListBox x:Name="EntryList" Background="Transparent" BorderThickness="0" Padding="4" Focusable="True"
+                                 SelectionMode="Multiple" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="local:MinutesEntry">
+                                    <Grid Classes="row" Classes.note="{Binding IsNote}" Classes.marked="{Binding IsMarked}"
+                                          RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,Auto,*,22,24">
+                                        <TextBlock Grid.Column="0" x:Name="TimeBlock" Text="{Binding TimeText}" Classes="caption"
+                                                   Width="{DynamicResource EntryTimeWidth}" FontSize="{DynamicResource EntrySmallFontSize}"
+                                                   FontFamily="{StaticResource MonoFont}" VerticalAlignment="Top" Margin="0,4,0,0"
+                                                   IsVisible="{Binding $parent[ListBox].Tag}"
+                                                   PointerReleased="Time_PointerReleased" Cursor="Hand"
+                                                   ToolTip.Tip="クリックすると、この発言の音声を聞けます"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Speaker.Name}" FontWeight="SemiBold" Margin="0,3,10,0" MinWidth="72"
+                                                   FontSize="{DynamicResource EntryFontSize}" VerticalAlignment="Top" MaxWidth="140" TextTrimming="CharacterEllipsis">
+                                            <!-- 話者の色を、テーマの背景で読める明るさにして使う -->
+                                            <TextBlock.Foreground>
+                                                <MultiBinding Converter="{x:Static local:SpeakerTextBrushConverter.Instance}">
+                                                    <Binding Path="Speaker.Color"/>
+                                                    <Binding Path="$parent[ListBox].ActualThemeVariant"/>
+                                                </MultiBinding>
+                                            </TextBlock.Foreground>
+                                        </TextBlock>
+                                        <TextBox Grid.Column="2" Classes="entry" Text="{Binding Text, Mode=TwoWay}"
+                                                 ToolTip.Tip="クリックして書き直せます"/>
+                                        <!-- 日本語以外の発言の日本語訳 (原文の下に出す) -->
+                                        <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding Translation}" Classes="caption"
+                                                   FontSize="{DynamicResource EntrySmallFontSize}" TextWrapping="Wrap" TextTrimming="None" Margin="6,0,4,3"
+                                                   IsVisible="{Binding HasTranslation}" ToolTip.Tip="日本語訳 (Mac 内の翻訳モデル)"/>
+                                        <!-- 前後の文脈で直した発言の印 (元の文をツールチップに出す) -->
+                                        <TextBlock Grid.Column="3" Text="✎" FontSize="12" VerticalAlignment="Top" Margin="4,5,0,0"
+                                                   Foreground="{DynamicResource AccentText}"
+                                                   IsVisible="{Binding IsCorrected}" ToolTip.Tip="{Binding CorrectionNote}"/>
+                                        <TextBlock Grid.Column="3" Text="📝" FontSize="11" VerticalAlignment="Top" Margin="4,5,0,0"
+                                                   ToolTip.Tip="手で書き込んだメモ" IsVisible="{Binding IsNote}"/>
+                                        <ToggleButton Grid.Column="4" Classes="mark" VerticalAlignment="Top" Margin="2,2,0,0"
+                                                      IsChecked="{Binding IsMarked, Mode=TwoWay}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <StackPanel x:Name="EmptyHint" Margin="22,10,22,0" VerticalAlignment="Top" IsHitTestVisible="False" MaxWidth="640"
+                                    HorizontalAlignment="Left">
+                            <TextBlock Classes="title" FontSize="15" Text="議事録の作り方" Margin="0,0,0,8"/>
+                            <ItemsControl x:Name="EmptySteps">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="local:GuideStep">
+                                        <DockPanel Margin="0,0,0,8">
+                                            <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Margin="0,0,12,0" VerticalAlignment="Top"
+                                                    Background="{DynamicResource Accent}">
+                                                <TextBlock Text="{Binding Number}" FontWeight="SemiBold" FontSize="12" HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center" Foreground="{DynamicResource OnAccent}"/>
+                                            </Border>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{DynamicResource Text1}" TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding Detail}" Classes="caption" TextWrapping="Wrap" TextTrimming="None" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Border BorderBrush="{DynamicResource Divider}" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="36,0,0,0">
+                                <TextBlock x:Name="EmptyNotes" Classes="caption" TextWrapping="Wrap" TextTrimming="None" LineHeight="18"/>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Column="2" Classes="card" Padding="12,10">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Classes="title" Text="話者"/>
+                    <TextBlock DockPanel.Dock="Top" Classes="caption" TextWrapping="Wrap" TextTrimming="None" Margin="0,2,0,8"
+                               Text="名前を書き換えて Enter。同じ名前にすると 1 人にまとまります。"/>
+                    <Expander x:Name="SpeakerOptions" DockPanel.Dock="Bottom" Margin="0,8,0,0" Header="聞き分けの調整" IsExpanded="False"
+                              HorizontalAlignment="Stretch" ToolTip.Tip="同じ人が 2 人に分かれる・別の人が 1 人にまとまるときに使います">
+                    <!-- 低い窓でも欄が切れて押せなくならないよう、収まらないときはスクロールする -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <!-- 人数の欄は 1 行を使う (ボタンと並べると、狭い欄で押せないほど細くなっていた) -->
+                        <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,8">
+                            <TextBlock Classes="caption" Text="人数" Margin="0,0,8,0" VerticalAlignment="Center"
+                                       ToolTip.Tip="ウィンドウの音声に出てくる人数 (マイクの自分は含めない)。分かっていれば選ぶと、多く分かれすぎるのを防ぎます"/>
+                            <ComboBox x:Name="SpeakerCountBox" Grid.Column="1" MinWidth="0" HorizontalAlignment="Stretch" SelectionChanged="SpeakerCount_Changed"
+                                      AutomationProperties.Name="ウィンドウの音声の人数" ToolTip.Tip="ウィンドウの音声に出てくる人数 (マイクの自分は含めない)"/>
+                        </Grid>
+                        <TextBlock Classes="caption" Text="声の聞き分けの細かさ"/>
+                        <Slider x:Name="ThresholdSlider" Minimum="-1" Maximum="1" Value="0" SmallChange="0.25"
+                                LargeChange="0.5" TickFrequency="0.25" IsSnapToTickEnabled="True" Margin="0,0,0,0"
+                                ValueChanged="Threshold_ValueChanged"
+                                ToolTip.Tip="右にするほど細かく分けます (同じ人が複数の話者に分かれるときは左へ)"/>
+                        <DockPanel>
+                            <TextBlock Classes="caption" Text="まとめる" FontSize="11"/>
+                            <TextBlock Classes="caption" Text="細かく分ける" FontSize="11" HorizontalAlignment="Right"/>
+                        </DockPanel>
+                        <Button Classes="command" Padding="6,3" Margin="0,8,0,0" HorizontalAlignment="Left" Click="Voices_Click"
+                                ToolTip.Tip="名前を付けた話者の声を覚え、次の会議で似た声の話者に自動で名前を付けます。覚えた声の確認・削除">
+                            <TextBlock x:Name="VoicesLabel" Text="覚えた声" FontSize="12"/>
+                        </Button>
+                    </StackPanel>
+                    </ScrollViewer>
+                    </Expander>
+                    <!-- 話者が多いときはこの欄だけスクロールする -->
+                    <ScrollViewer x:Name="SpeakerScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0">
+                        <ItemsControl x:Name="SpeakerList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="local:MinutesSpeaker">
+                                    <DockPanel Margin="0,0,0,6">
+                                        <Ellipse DockPanel.Dock="Left" Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                 Fill="{Binding Color, Converter={x:Static local:HexBrushConverter.Instance}}"/>
+                                        <!-- 発言時間と全体に占める割合 -->
+                                        <StackPanel DockPanel.Dock="Bottom" Margin="2,4,2,0" ToolTip.Tip="発言時間 ・ 全体に占める割合">
+                                            <Grid x:Name="Track" Height="3">
+                                                <Border CornerRadius="1.5" Background="{DynamicResource Divider}"/>
+                                                <Border HorizontalAlignment="Left" CornerRadius="1.5"
+                                                        Background="{Binding Color, Converter={x:Static local:HexBrushConverter.Instance}}">
+                                                    <Border.Width>
+                                                        <MultiBinding Converter="{x:Static local:ShareWidthConverter.Instance}">
+                                                            <Binding Path="ShareValue"/>
+                                                            <Binding Path="Bounds.Width" ElementName="Track"/>
+                                                        </MultiBinding>
+                                                    </Border.Width>
+                                                </Border>
+                                            </Grid>
+                                            <TextBlock Text="{Binding Share}" Classes="caption" FontSize="11" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <TextBox Text="{Binding Name, Mode=OneWay}" MinWidth="0" Classes="speakerName"
+                                                 KeyDown="SpeakerName_KeyDown" GotFocus="SpeakerName_GotFocus" LostFocus="SpeakerName_LostFocus"
+                                                 ToolTip.Tip="Enter で確定 (すべての発言に反映)、Esc で取り消し。ほかの話者と同じ名前にすると 1 人にまとめます"/>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- 下のバー -->
+        <DockPanel Grid.Row="2" Margin="2,8,0,0">
+            <!-- 状態の案内は 1 行を使って、チェックやボタンに押されて読めなくならないようにする -->
+            <!-- 大事な知らせ (警告・エラー) は目立つ帯で出し、閉じるまで残す -->
+            <Border x:Name="NoticeBar" DockPanel.Dock="Top" IsVisible="False" CornerRadius="6" BorderThickness="1" Padding="10,6,4,6" Margin="0,0,0,6">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Classes="command" Padding="6,2" VerticalAlignment="Top" Click="NoticeClose_Click"
+                            ToolTip.Tip="閉じる" AutomationProperties.Name="お知らせを閉じる">
+                        <TextBlock Text="✕" FontSize="11"/>
+                    </Button>
+                    <Button x:Name="NoticeAction" DockPanel.Dock="Right" IsVisible="False" Padding="12,3" Margin="8,0,4,0"
+                            VerticalAlignment="Center" Click="NoticeAction_Click"/>
+                    <TextBlock x:Name="NoticeIcon" DockPanel.Dock="Left" FontSize="13" Margin="0,1,10,0" VerticalAlignment="Top"/>
+                    <TextBlock x:Name="NoticeText" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource Text1}"/>
+                </DockPanel>
+            </Border>
+            <TextBlock x:Name="StatusText" DockPanel.Dock="Top" Classes="caption" Margin="0,0,8,6" TextWrapping="Wrap" MaxLines="2"/>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button x:Name="SummarizeButton" Classes="command" Click="Summarize_Click"
+                        ToolTip.Tip="概要・決定事項・やること・主な論点を AI でまとめます (Mac 内の AI。会議の内容を外部に送りません)">
+                    <TextBlock Text="≡ 要約"/>
+                </Button>
+                <Rectangle Width="1" Height="18" Margin="4,0,6,0" VerticalAlignment="Center" Fill="{DynamicResource Divider}"/>
+                <Button x:Name="OpenButton" Classes="command" Click="Open_Click"
+                        ToolTip.Tip="最近の議事録や、保存した議事録 (別の PC で作ったものも) を開きます。話者の名前を直したりして保存し直せます (⌘O)">
+                    <TextBlock Text="開く…"/>
+                </Button>
+                <Button Classes="command" Click="New_Click" ToolTip.Tip="今の議事録を閉じて新しく始める">
+                    <TextBlock Text="＋ 新規"/>
+                </Button>
+                <Button Classes="command" Click="Copy_Click" ToolTip.Tip="議事録をテキストとしてコピー (要約があれば先頭に入ります)">
+                    <TextBlock Text="コピー"/>
+                </Button>
+                <Button Classes="command" Click="Save_Click" ToolTip.Tip="Markdown (.md)・テキスト (.txt)・字幕 (.srt / .vtt)・議事録データ (.json) で保存 (⌘S)">
+                    <TextBlock Text="保存…"/>
+                </Button>
+            </StackPanel>
+            <!-- 文字の画面と同じ設定の画面を、議事録のページで開く (文字の大きさ・表示・AI の訳・声を覚える) -->
+            <Button x:Name="SettingsButton" DockPanel.Dock="Left" Classes="command" VerticalAlignment="Center" Click="Settings_Click"
+                    ToolTip.Tip="設定 (文字の大きさ・表示・日本語訳・声を覚える など)">
+                <TextBlock Text="⚙ 設定"/>
+            </Button>
+            <Button x:Name="ViewButton" Classes="command" VerticalAlignment="Center" ToolTip.Tip="時刻・日本語訳・相づち・自動スクロールの表示を切り替えます">
+                <TextBlock x:Name="ViewLabel" Text="表示 ▴"/>
+                <Button.Flyout>
+                    <Flyout Placement="TopEdgeAlignedLeft">
+                        <StackPanel Margin="4">
+                <CheckBox x:Name="AutoScrollCheck" Content="自動スクロール" MinWidth="0" Margin="0,2" Click="AutoScrollCheck_Click"
+                          ToolTip.Tip="新しい発言が加わるたびに一番下 (最新) までスクロールします。発言を書き直している間は止まります"/>
+                <CheckBox x:Name="TimeCheck" Content="時刻" MinWidth="0" Margin="0,2" Click="TimeCheck_Click"
+                          ToolTip.Tip="発言の時刻 (ファイルでは先頭からの時間) を表示し、コピー・保存にも含めます"/>
+                <CheckBox x:Name="TranslateCheck" Content="日本語訳" MinWidth="0" Margin="0,2" Click="TranslateCheck_Click"
+                          ToolTip.Tip="英語など日本語以外の発言に、日本語訳を原文とセットで付けます (コピー・保存にも含めます)。翻訳は Mac 内のモデルで行い、会議の内容を外部に送りません"/>
+                <CheckBox x:Name="FillerCheck" Content="相づちを除く" MinWidth="0" Margin="0,2" Click="FillerCheck_Click"
+                          ToolTip.Tip="「はい」「なるほど」「えーと」など、相づち・言いよどみだけの発言を画面とコピー・保存から除きます (消さずに隠すだけなので、外すと戻ります)"/>
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+        </DockPanel>
+
+        <!-- 準備中の表示: 音声認識のモデルを読み込んでいる間 (読み込み中も「裏で準備」で閉じて操作できる) -->
+        <Border x:Name="LoadingOverlay" Grid.RowSpan="3" IsVisible="False" CornerRadius="8" Margin="-4"
+                Background="{DynamicResource Smoke}">
+            <Border Classes="card" Background="{DynamicResource CardBg}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" Width="470" Padding="26,22,26,18">
+                <StackPanel>
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Left" Text="🎙" FontSize="22" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="LoadingTitle" Text="議事録の準備をしています" FontSize="18" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Text1}" VerticalAlignment="Center"/>
+                    </DockPanel>
+                    <TextBlock x:Name="LoadingNote" Classes="caption" TextWrapping="Wrap" TextTrimming="None" Margin="0,8,0,14"
+                               Text="音声認識の AI を読み込んでいます。準備ができると、この表示は自動で消えます。"/>
+                    <ItemsControl x:Name="LoadingSteps">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local:LoadStep">
+                                <DockPanel Margin="0,5">
+                                    <TextBlock DockPanel.Dock="Left" Text="{Binding Icon}" FontSize="14" Width="18" TextAlignment="Center" Margin="0,0,12,0"
+                                               Classes="stepIcon" Classes.active="{Binding IsActive}" Classes.done="{Binding IsDone}" Classes.failed="{Binding IsFailed}"
+                                               RenderTransformOrigin="0.5,0.5">
+                                        <TextBlock.RenderTransform><RotateTransform/></TextBlock.RenderTransform>
+                                    </TextBlock>
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding TimeText}" Classes="caption" FontFamily="{StaticResource MonoFont}"/>
+                                    <TextBlock Text="{Binding Title}" VerticalAlignment="Center" TextWrapping="Wrap"
+                                               Classes="stepTitle" Classes.active="{Binding IsActive}" Classes.done="{Binding IsDone}" Classes.failed="{Binding IsFailed}"/>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <ProgressBar x:Name="LoadingBar" IsIndeterminate="True" Height="3" MinHeight="3" Margin="0,14,0,0"/>
+                    <DockPanel Margin="0,12,0,0">
+                        <Button x:Name="LoadingHideButton" DockPanel.Dock="Right" Content="裏で準備" Padding="14,5" Click="LoadingHide_Click"
+                                ToolTip.Tip="この表示を閉じます。準備は続き、終わると下の欄に「準備完了」と出ます"/>
+                        <TextBlock x:Name="LoadingElapsed" Classes="caption" TextWrapping="Wrap" TextTrimming="None"/>
+                    </DockPanel>
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
+</Window>

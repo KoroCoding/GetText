@@ -1,0 +1,88 @@
+# GetText の Windows 版をビルドして確かめ、配布用の ZIP を作る (GitHub の Windows で実行)。
+# - 単体テストを動かし、tools/make_release.ps1 で配布用の ZIP (.NET 入り) を作る
+# - SignPath の設定 (リポジトリの Variables と Secrets。docs/SIGNPATH.md) があれば、GetText.exe と GetText.dll に署名する
+# - v で始まるタグ (v1.0.0 など) を付けたときは、GitHub の Releases に ZIP を置く
+name: Windows
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: 単体テスト
+        run: dotnet test tests/GetText.Tests --nologo -v q
+
+      - name: 配布用のファイルを作る
+        shell: powershell
+        run: |
+          ./tools/make_release.ps1 -Out GetText-windows-x64.zip
+          # 署名に渡すため、ZIP の中身 (GetText フォルダ) を取り出しておく
+          Expand-Archive GetText-windows-x64.zip -DestinationPath package
+
+      - name: 署名する前のファイルを残す
+        id: unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: GetText-windows-x64-unsigned
+          path: package/GetText
+
+      - name: SignPath で署名する
+        id: sign
+        if: vars.SIGNPATH_ORGANIZATION_ID != '' && github.event_name != 'pull_request'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ startsWith(github.ref, 'refs/tags/') && 'release-signing' || 'test-signing' }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed/GetText
+
+      - name: 署名したファイルで ZIP を作り直す
+        if: steps.sign.outcome == 'success'
+        shell: powershell
+        run: |
+          Remove-Item GetText-windows-x64.zip
+          Compress-Archive -Path signed/GetText -DestinationPath GetText-windows-x64.zip
+          (Get-AuthenticodeSignature signed/GetText/GetText.exe) | Format-List Status, SignerCertificate
+
+      - name: 配布用の ZIP を残す
+        uses: actions/upload-artifact@v4
+        with:
+          name: GetText-windows-x64
+          path: GetText-windows-x64.zip
+
+      - name: Releases に置く (タグのとき)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "GetText $GITHUB_REF_NAME" --notes "README の「別の PC で使う」を参照してください。"
+          gh release upload "$GITHUB_REF_NAME" GetText-windows-x64.zip --clobber

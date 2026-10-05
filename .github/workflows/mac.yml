@@ -1,0 +1,211 @@
+# GetText の Mac 版をビルドして確かめる (GitHub の Mac で実行)。
+# 結果 (確認の結果・画面の画像・GetText.app の ZIP) は ci/mac-results ブランチに置く (毎回置き換える)。
+# 手動で実行するとき「full」をオンにすると、Python と AI のモデルを入れて議事録の通しの確認もする (時間がかかる)。
+name: Mac
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      full:
+        description: 'Python と AI のモデルも入れて、議事録の通しの確認もする'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mac-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      CI: 'true'
+      # 手動で full をオンにしたとき、またはコミットのメッセージに [mac-full] があるときは、議事録の通しの確認もする
+      FULL: ${{ inputs.full || contains(github.event.head_commit.message, '[mac-full]') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: 環境
+        run: |
+          mkdir -p results
+          { sw_vers; uname -m; xcodebuild -version; swift --version; dotnet --version; } > results/environment.txt 2>&1 || true
+          cat results/environment.txt
+
+      - name: GetText.app を作る (Apple シリコン)
+        id: build_arm
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          bash mac/packaging/build_app.sh out arm64 2>&1 | tee results/build_arm64.txt
+
+      - name: GetText.app を作る (Intel)
+        id: build_x64
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          mkdir -p out-x64
+          bash mac/packaging/build_app.sh out-x64 x64 2>&1 | tee results/build_x64.txt
+          cp out-x64/GetText-mac-x64.zip out/ || true
+
+      - name: 補助プログラムの確認
+        id: helper
+        if: steps.build_arm.outcome == 'success'
+        continue-on-error: true
+        run: |
+          out/GetText.app/Contents/MacOS/GetText --selftest-helper results/helper.txt
+
+      - name: 議事録の画面の操作の確認 (画面に出さずに)
+        id: ui
+        if: steps.build_arm.outcome == 'success'
+        continue-on-error: true
+        run: |
+          out/GetText.app/Contents/MacOS/GetText --selftest-ui results/ui.txt
+
+      - name: 画面の画像
+        id: snapshots
+        if: steps.build_arm.outcome == 'success'
+        continue-on-error: true
+        run: |
+          out/GetText.app/Contents/MacOS/GetText --snapshots results/snapshots
+          out/GetText.app/Contents/MacOS/GetText --snapshots results/snapshots_dark dark
+
+      - name: 実際の画面で起動
+        id: smoke
+        if: steps.build_arm.outcome == 'success'
+        continue-on-error: true
+        run: |
+          mkdir -p results/smoke
+          # Finder から開くのと同じく、アプリとして起動する (2 分で打ち切る)
+          ( out/GetText.app/Contents/MacOS/GetText --smoke results/smoke/smoke.txt > results/smoke/stdout.txt 2>&1 & echo $! > pid )
+          for i in $(seq 1 120); do
+            if ! kill -0 "$(cat pid)" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          kill "$(cat pid)" 2>/dev/null || true
+          cp "$HOME/Library/Application Support/GetText/logs/error.log" results/smoke/error.log 2>/dev/null || true
+          test -f results/smoke/smoke.txt && grep -q "すべて合格" results/smoke/smoke.txt
+
+      - name: Intel 版の起動 (Rosetta があれば)
+        id: x64_run
+        if: steps.build_x64.outcome == 'success'
+        continue-on-error: true
+        run: |
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then
+            arch -x86_64 out-x64/GetText.app/Contents/MacOS/GetText --selftest-ui results/ui_x64.txt
+          else
+            echo "Rosetta が無いので Intel 版は起動していません" > results/ui_x64.txt
+          fi
+
+      - uses: actions/setup-python@v5
+        if: env.FULL == 'true'
+        with:
+          python-version: '3.11'
+
+      - name: モデルのキャッシュ
+        if: env.FULL == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Application Support/offline/models
+          key: gettext-models-${{ hashFiles('offline/download_models.py') }}
+
+      - name: Python と議事録のモデルを入れる
+        id: setup
+        if: env.FULL == 'true'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          bash out/GetText.app/Contents/Resources/setup_mac.sh --python "$(which python3.11)" --skip-models 2>&1 | tee results/setup.txt
+          py="$HOME/Library/Application Support/offline/venv/bin/python3"
+          export SSL_CERT_FILE="$("$py" -m certifi)"
+          for m in reazonspeech-k2-v2 kotoba-whisper-v2.0 whisper-large-v3-turbo speaker-campplus; do
+            "$py" offline/download_models.py "$HOME/Library/Application Support/offline/models" --only $m 2>&1 | grep -v "%" | tee -a results/setup.txt
+          done
+
+      - name: 議事録の通しの確認
+        id: minutes
+        if: env.FULL == 'true' && steps.setup.outcome == 'success'
+        continue-on-error: true
+        env:
+          GETTEXT_NO_LLM: '1'
+        run: |
+          set -o pipefail
+          mkdir -p results/minutes
+          py="$HOME/Library/Application Support/offline/venv/bin/python3"
+          "$py" -c "import ctranslate2, faster_whisper, sherpa_onnx, av, janome, numpy; print('Python の部品: OK', ctranslate2.__version__)" 2>&1 | tee results/minutes/imports.txt
+          out/GetText.app/Contents/MacOS/GetText --selftest-minutes tests/assets/meeting.wav tests/assets/truth.json results/minutes nosummary 2>&1 | tee results/minutes/stdout.txt
+
+      - name: 字幕つきの動画の確認
+        id: burn
+        if: env.FULL == 'true' && steps.setup.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          mkdir -p results/burn
+          py="$HOME/Library/Application Support/offline/venv/bin/python3"
+          cd offline && "$py" subtitle_video.py --selftest ../results/burn 2>&1 | tee ../results/burn/stdout.txt
+
+      - name: 再生した音の取り込みの確認
+        id: capture
+        if: env.FULL == 'true' && steps.setup.outcome == 'success'
+        continue-on-error: true
+        env:
+          GETTEXT_NO_LLM: '1'
+        run: |
+          mkdir -p results/capture
+          out/GetText.app/Contents/MacOS/GetText --selftest-capture tests/assets/meeting.wav tests/assets/truth.json results/capture > results/capture/stdout.txt 2>&1 || test $? -eq 3
+
+      - name: まとめ
+        if: always()
+        run: |
+          {
+            echo "GetText Mac ${{ github.sha }} $(date '+%Y-%m-%d %H:%M')"
+            echo "build_arm64: ${{ steps.build_arm.outcome }}"
+            echo "build_x64: ${{ steps.build_x64.outcome }}"
+            echo "helper: ${{ steps.helper.outcome }}"
+            echo "ui: ${{ steps.ui.outcome }}"
+            echo "snapshots: ${{ steps.snapshots.outcome }}"
+            echo "smoke: ${{ steps.smoke.outcome }}"
+            echo "x64_run: ${{ steps.x64_run.outcome }}"
+            echo "setup: ${{ steps.setup.outcome }}"
+            echo "minutes: ${{ steps.minutes.outcome }}"
+            echo "burn: ${{ steps.burn.outcome }}"
+            echo "capture: ${{ steps.capture.outcome }}"
+          } > results/summary.txt
+          cat results/summary.txt
+          cp out/*.zip results/ 2>/dev/null || true
+          mkdir -p results/logs
+          cp "$HOME/Library/Application Support/GetText/logs/"*.log results/logs/ 2>/dev/null || true
+          rm -f results/minutes/*.wav results/capture/*.wav results/minutes/*.m4a results/capture/*.m4a 2>/dev/null || true
+          du -sh results/* || true
+
+      - name: 結果をブランチに置く
+        if: always()
+        run: |
+          cd results
+          git init -q
+          git checkout -q -b ci/mac-results
+          git add -A
+          git -c user.name="gettext-ci" -c user.email="gettext-ci@users.noreply.github.com" commit -qm "GetText Mac ${{ github.sha }}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:ci/mac-results
+
+      # 確認のどれかが失敗したら、実行の結果を「失敗」にする (各ステップは結果を残すため失敗しても続けている)
+      - name: 判定
+        if: always()
+        run: |
+          if grep -q ": failure" results/summary.txt; then
+            grep ": failure" results/summary.txt
+            exit 1
+          fi

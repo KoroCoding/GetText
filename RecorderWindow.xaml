@@ -1,0 +1,115 @@
+<Window x:Class="GetText.RecorderWindow"
+        Icon="/Assets/app.ico"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="GetText — 画面の録画" Width="560" SizeToContent="Height" MinWidth="460" ResizeMode="CanMinimize"
+        FontFamily="{StaticResource UiFont}" FontSize="13">
+    <StackPanel Margin="12,10,12,12">
+        <!-- 録画するもの -->
+        <Border Style="{StaticResource Card}" Padding="14,12">
+            <StackPanel>
+                <TextBlock Style="{StaticResource Caption}" Text="録画するウィンドウ (🔊 = いま音を出しているアプリ)" Margin="0,0,0,4"/>
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="6,0,0,0" Click="Refresh_Click"
+                            ToolTip="ウィンドウの一覧を読み直す" AutomationProperties.Name="一覧を読み直す"/>
+                    <ComboBox x:Name="TargetBox" HorizontalAlignment="Stretch" SelectionChanged="TargetBox_SelectionChanged"
+                              AutomationProperties.Name="録画するウィンドウ"/>
+                </DockPanel>
+                <TextBlock x:Name="TargetWarning" Style="{StaticResource Caption}" TextWrapping="Wrap" TextTrimming="None" Margin="0,6,0,0"
+                           Foreground="#C42B1C" Visibility="Collapsed"/>
+                <WrapPanel Margin="0,10,0,0">
+                    <CheckBox x:Name="AudioCheck" Content="その音も録音する" Margin="0,0,18,4" Click="Option_Click"
+                              ToolTip="選んだアプリが再生している音だけを録音します (ほかのアプリの音・通知音は入りません)。画面全体を選んだときは GetText 以外のすべての音"/>
+                    <CheckBox x:Name="MicCheck" Content="マイク (自分の声) も入れる" Margin="0,0,18,4" Click="Option_Click"
+                              ToolTip="議事録で選んだマイク (無ければ既定の通信デバイス) の音を重ねます"/>
+                </WrapPanel>
+                <WrapPanel Margin="0,6,0,0">
+                    <TextBlock Style="{StaticResource Caption}" Text="画質" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox x:Name="QualityBox" Width="190" Margin="0,0,18,4" SelectionChanged="Option_Changed" AutomationProperties.Name="画質"/>
+                    <TextBlock Style="{StaticResource Caption}" Text="なめらかさ" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox x:Name="FpsBox" Width="130" Margin="0,0,0,4" SelectionChanged="Option_Changed" AutomationProperties.Name="1 秒あたりのコマ数"/>
+                </WrapPanel>
+                <DockPanel Margin="0,8,0,0">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource CommandPush}" Padding="8,4" Click="OpenFolder_Click"
+                            ToolTip="保存先のフォルダーを開く">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE838;" FontSize="12"/>
+                            <TextBlock Text="開く" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource CommandPush}" Padding="8,4" Click="ChangeFolder_Click"
+                            ToolTip="保存先のフォルダーを変える">
+                        <TextBlock Text="変更…"/>
+                    </Button>
+                    <TextBlock Style="{StaticResource Caption}" Text="保存先" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock x:Name="FolderText" Style="{StaticResource Caption}" VerticalAlignment="Center"
+                               ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+                </DockPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- プレビュー (録画する前は選んだウィンドウ、録画中は録画している画面) -->
+        <Border Style="{StaticResource Card}" Padding="10,8,10,10" Margin="0,8,0,0">
+            <DockPanel>
+                <DockPanel DockPanel.Dock="Top" Margin="2,0,0,6">
+                    <CheckBox x:Name="PreviewCheck" DockPanel.Dock="Right" Content="表示する" MinWidth="0" Click="PreviewCheck_Click"
+                              ToolTip="プレビューを出す / 止める (止めると少し軽くなります)"/>
+                    <TextBlock Style="{StaticResource Caption}" Text="プレビュー" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="PreviewSize" Style="{StaticResource Caption}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                </DockPanel>
+                <Border x:Name="PreviewFrame" Height="250" CornerRadius="6" Background="#FF1E1E1E" ClipToBounds="True">
+                    <Grid>
+                        <Image x:Name="PreviewImage" Stretch="Uniform" RenderTransformOrigin="0.5,0.5"
+                               RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="録画のプレビュー"/>
+                        <TextBlock x:Name="PreviewHint" Foreground="#FFB0B0B0" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   TextAlignment="Center" TextWrapping="Wrap" Margin="16" Text="録画するウィンドウを選ぶと、ここに映ります"/>
+                    </Grid>
+                </Border>
+            </DockPanel>
+        </Border>
+
+        <!-- 録画 -->
+        <Border Style="{StaticResource Card}" Padding="14,12" Margin="0,8,0,0">
+            <DockPanel>
+                <Button x:Name="RecordButton" DockPanel.Dock="Left" Style="{StaticResource AccentButtonStyle}" MinWidth="160" Padding="16,8"
+                        Click="Record_Click" AutomationProperties.Name="録画を開始 / 停止">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="RecordIcon" Style="{StaticResource Icon}" Text="&#xE7C8;" FontSize="14"
+                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                        <TextBlock x:Name="RecordLabel" Text="録画を開始" Margin="8,0,0,0" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <Border x:Name="RecDot" Width="10" Height="10" CornerRadius="5" Background="#DC2626" Margin="0,0,8,0" Visibility="Collapsed"
+                                VerticalAlignment="Center"/>
+                        <TextBlock x:Name="ElapsedText" Text="00:00:00" FontFamily="Consolas, Yu Gothic UI" FontSize="18"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                    </StackPanel>
+                    <TextBlock x:Name="SizeText" Style="{StaticResource Caption}" Margin="0,2,0,0"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- 状態・保存した録画 -->
+        <TextBlock x:Name="StatusText" Style="{StaticResource Caption}" TextWrapping="Wrap" TextTrimming="None" Margin="4,8,4,0"
+                   AutomationProperties.LiveSetting="Polite"/>
+        <DockPanel x:Name="LastPanel" Margin="0,6,0,0" Visibility="Collapsed">
+            <Button DockPanel.Dock="Right" Style="{StaticResource CommandPush}" Padding="8,4" Click="ShowLast_Click" ToolTip="保存した録画をフォルダーで表示">
+                <TextBlock Text="フォルダーで表示"/>
+            </Button>
+            <Button DockPanel.Dock="Right" Style="{StaticResource CommandPush}" Padding="8,4" Click="PlayLast_Click" ToolTip="保存した録画を再生する">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE768;" FontSize="12"/>
+                    <TextBlock Text="再生" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <TextBlock x:Name="LastText" VerticalAlignment="Center" Margin="4,0,8,0" TextTrimming="CharacterEllipsis"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+        </DockPanel>
+        <Border BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0" Padding="4,8,4,0">
+            <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" TextTrimming="None" LineHeight="18"
+                       Text="・会議を録画するときは、参加者の同意を得てください。&#x0a;・ウィンドウを最小化している間は、止まった画面になります (前に出す必要はなく、ほかの窓の後ろでも録画できます)。&#x0a;・取り込みを禁止しているウィンドウ (主催者が画面キャプチャを禁止した会議・著作権保護の動画) は、Windows が黒い画面を渡すため黒く録画されます。"/>
+        </Border>
+    </StackPanel>
+</Window>

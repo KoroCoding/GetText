@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath の「Artifact configuration」に貼るもの (docs/SIGNPATH.md)。
+  GitHub Actions (.github/workflows/windows.yml) が渡すのは GetText フォルダの中身 (GetText.exe などが一番上にある ZIP)。
+  署名するのは、このリポジトリのソースから作った GetText.exe と GetText.dll だけ (.NET の部品は Microsoft の署名が付いている)。
+  製品名と版が実行ファイルの情報と合わないときは署名しない (SignPath Foundation の条件)。
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="GetText.exe" product-name="GetText" product-version="1.*">
+      <authenticode-sign />
+    </pe-file>
+    <pe-file path="GetText.dll" product-name="GetText" product-version="1.*">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

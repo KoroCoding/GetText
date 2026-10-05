@@ -1,0 +1,715 @@
+<Window x:Class="GetText.MinutesWindow"
+        Icon="/Assets/app.ico"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:GetText"
+        Title="GetText — 議事録" Width="860" Height="620" MinWidth="560" MinHeight="380"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
+        FontFamily="{StaticResource UiFont}" FontSize="13">
+    <Window.TaskbarItemInfo>
+        <TaskbarItemInfo x:Name="Taskbar"/>
+    </Window.TaskbarItemInfo>
+    <Window.Resources>
+        <!-- 発言の文字の大きさ (設定 → 表示、または Ctrl+ホイールで変える) -->
+        <sys:Double x:Key="EntryFontSize">14</sys:Double>
+        <sys:Double x:Key="EntrySmallFontSize">13</sys:Double>
+        <sys:Double x:Key="EntryTimeWidth">68</sys:Double>
+        <local:HexBrushConverter x:Key="HexBrush"/>
+        <local:SpeakerTextBrushConverter x:Key="SpeakerTextBrush"/>
+        <local:ShareWidthConverter x:Key="ShareWidth"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVisible"/>
+        <!-- 発言の右クリックメニュー (本文の上でも、時刻・話者の上でも同じ) -->
+        <ContextMenu x:Key="EntryMenu" x:Shared="False" Opened="EntryMenu_Opened">
+            <MenuItem Header="この発言を削除" InputGestureText="Delete" Click="DeleteEntry_Click">
+                <MenuItem.Icon><TextBlock Style="{StaticResource Icon}" Text="&#xE74D;"/></MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="削除を元に戻す" InputGestureText="Ctrl+Z" Click="UndoDelete_Click" Tag="undo"/>
+            <MenuItem Header="話者を変更" Tag="speakers">
+                <MenuItem.Icon><TextBlock Style="{StaticResource Icon}" Text="&#xE77B;"/></MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="重要な発言にする (★)" InputGestureText="Ctrl+B" Click="ToggleMark_Click" Tag="mark">
+                <MenuItem.Icon><TextBlock Style="{StaticResource Icon}" Text="&#xE734;"/></MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="この発言の音声を聞く" Click="PlayEntry_Click" Tag="play">
+                <MenuItem.Icon><TextBlock Style="{StaticResource Icon}" Text="&#xE768;"/></MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="発言をコピー" Click="CopyEntry_Click">
+                <MenuItem.Icon><TextBlock Style="{StaticResource Icon}" Text="&#xE8C8;"/></MenuItem.Icon>
+            </MenuItem>
+            <Separator/>
+            <MenuItem Command="ApplicationCommands.Cut" Header="切り取り"/>
+            <MenuItem Command="ApplicationCommands.Copy" Header="選択した文字をコピー"/>
+            <MenuItem Command="ApplicationCommands.Paste" Header="貼り付け"/>
+        </ContextMenu>
+        <!-- 書き直せる本文 (枠線なし) -->
+        <Style x:Key="MarkToggle" TargetType="ToggleButton">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Visibility" Value="Hidden"/>
+            <Setter Property="ToolTip" Value="重要な発言に ★ を付ける / 外す (Ctrl+B)。保存にも入り、要約で重視されます"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border Background="Transparent" Padding="4" MinWidth="24" MinHeight="24">
+                            <TextBlock x:Name="Glyph" FontFamily="{StaticResource IconFont}" FontSize="14" Text="&#xE734;" HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Glyph" Property="Text" Value="&#xE735;"/>
+                                <Setter TargetName="Glyph" Property="Foreground" Value="#E8A200"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMarked}" Value="True">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="EntryText" TargetType="TextBox">
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="AcceptsReturn" Value="False"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+            <Setter Property="SelectionBrush" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+            <Setter Property="IsInactiveSelectionHighlightEnabled" Value="True"/>
+            <Setter Property="FontSize" Value="{DynamicResource EntryFontSize}"/>
+            <Setter Property="ContextMenu" Value="{StaticResource EntryMenu}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Bg" Background="Transparent" CornerRadius="4" Padding="4,2">
+                            <ScrollViewer x:Name="PART_ContentHost" VerticalScrollBarVisibility="Disabled"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource ControlFillColorInputActiveBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="10,6,10,8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 取り込み元と記録ボタン -->
+        <Border Grid.Row="0" Style="{StaticResource Card}" Padding="12,10" Margin="0,0,0,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                    <TextBlock Style="{StaticResource Caption}" Text="文字起こしするアプリの音を選ぶ (🔊 = いま音を出しているアプリ)"/>
+                    <DockPanel Margin="0,4,0,0">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="4,0,0,0"
+                                Click="RefreshWindows_Click" ToolTip="アプリの一覧を更新" AutomationProperties.Name="アプリの一覧を更新"/>
+                        <ComboBox x:Name="WindowBox" HorizontalAlignment="Stretch" AutomationProperties.Name="文字起こしするアプリ"/>
+                    </DockPanel>
+                    <WrapPanel Margin="0,8,0,0">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,16,0" VerticalAlignment="Center"
+                                    ToolTip="文字にする言語。1 つ選ぶとその言語として、複数選ぶと発言ごとにその中から判定します (日本語は kotoba-whisper、それ以外は Whisper large-v3 turbo)">
+                            <TextBlock Style="{StaticResource Caption}" Text="言語" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <ToggleButton x:Name="LanguageButton" MinWidth="150" Padding="10,5" HorizontalContentAlignment="Stretch" AutomationProperties.Name="文字にする言語">
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="10" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="LanguageLabel" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="220"/>
+                                </DockPanel>
+                            </ToggleButton>
+                            <Popup x:Name="LanguagePopup" Opened="Popup_Opened" PreviewKeyDown="Popup_PreviewKeyDown" PlacementTarget="{Binding ElementName=LanguageButton}" Placement="Bottom"
+                                   StaysOpen="False" AllowsTransparency="True"
+                                   IsOpen="{Binding IsChecked, ElementName=LanguageButton, Mode=TwoWay}">
+                                <Border Background="{DynamicResource ApplicationBackgroundBrush}" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                        BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,4,0,0">
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource Caption}" Text="文字にする言語 (複数選ぶと発言ごとに判定)" Margin="0,0,0,6"/>
+                                        <ItemsControl x:Name="LanguageList">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <CheckBox Content="{Binding Label}" IsChecked="{Binding IsSelected}" Margin="0,2"
+                                                              Click="LanguageCheck_Click"/>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </Popup>
+                        </StackPanel>
+                        <Button x:Name="TermsButton" Padding="10,5" Margin="0,0,16,0" Click="Terms_Click"
+                                ToolTip="会議に出てくる人名・社名・専門用語を登録すると、その表記で書きます (読みが同じなら直す・置き換えの決まりも書ける)">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE8D2;" FontSize="13"/>
+                                <TextBlock x:Name="TermsLabel" Text="用語" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <CheckBox x:Name="MicCheck" Content="マイク (自分の声) も入れる" IsChecked="True" Margin="0,0,16,0"
+                                  ToolTip="自分の声もマイクから取り込み、「自分」として議事録に入れます"/>
+                        <!-- あまり変えない設定はまとめておく (押すと開く) -->
+                        <ToggleButton x:Name="OptionsButton" Padding="10,5" Margin="0,0,16,0" ToolTip="速さ・文脈による補正・音声の保存などの設定" AutomationProperties.Name="詳細の設定">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE713;" FontSize="13"/>
+                                <TextBlock Text="詳細" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="10" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ToggleButton>
+                        <Popup x:Name="OptionsPopup" Opened="Popup_Opened" PreviewKeyDown="Popup_PreviewKeyDown" PlacementTarget="{Binding ElementName=OptionsButton}" Placement="Bottom"
+                               StaysOpen="False" AllowsTransparency="True"
+                               IsOpen="{Binding IsChecked, ElementName=OptionsButton, Mode=TwoWay}">
+                            <Border Background="{DynamicResource ApplicationBackgroundBrush}" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                    BorderThickness="1" CornerRadius="8" Padding="14,12" Margin="0,4,0,0" Width="420">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource CardTitle}" Text="マイク"/>
+                                    <ComboBox x:Name="MicBox" Margin="0,6,0,2" HorizontalAlignment="Stretch" SelectionChanged="MicBox_SelectionChanged"
+                                              AutomationProperties.Name="使うマイク"/>
+                                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" TextTrimming="None" Margin="0,0,0,12"
+                                               Text="自分の声が入らないときは、会議アプリ (Teams・Zoom など) で使っているマイクを選んでください。"/>
+                                    <TextBlock Style="{StaticResource CardTitle}" Text="速さ"/>
+                                    <ComboBox x:Name="SpeedBox" Margin="0,6,0,2" HorizontalAlignment="Stretch" SelectionChanged="SpeedBox_SelectionChanged"/>
+                                    <TextBlock x:Name="SpeedNote" Style="{StaticResource Caption}" TextWrapping="Wrap" TextTrimming="None" Margin="0,0,0,12"/>
+                                    <CheckBox x:Name="CorrectCheck" Content="文脈で聞き間違いを補正" IsChecked="True" Margin="0,0,0,2"
+                                              Click="Correct_Click"/>
+                                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" TextTrimming="None" Margin="28,0,0,10"
+                                               Text="前後の発言から、同音異義語などの聞き間違いを AI が直します。GPU が無い PC では重く、文字になるのが遅れることがあります。"/>
+                                    <CheckBox x:Name="SaveAudioCheck" Content="会議の音声も保存する" IsChecked="True" Margin="0,0,0,2" Click="SaveAudio_Click"/>
+                                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" TextTrimming="None" Margin="28,0,0,10"
+                                               Text="発言の時刻をクリックして聞き直せます (1 時間で約 15MB。PC の外には送りません)。"/>
+                                    <CheckBox x:Name="RecordVideoCheck" Content="会議の画面も録画する" Margin="0,0,0,2" Click="RecordVideo_Click"/>
+                                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" TextTrimming="None" Margin="28,0,0,4"
+                                               Text="選んだアプリのウィンドウ (「すべての音」なら画面全体) を、音も入れて MP4 に録画します。保存先は「画面の録画」と同じです (1 時間で約 1〜2GB)。"/>
+                                    <CheckBox x:Name="SubtitleVideoCheck" Content="字幕つきの動画も作る" Margin="28,0,0,2" Click="RecordVideo_Click"/>
+                                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" TextTrimming="None" Margin="56,0,0,10"
+                                               Text="記録を止めたあと、発言を話者の名前つきの字幕にして焼き込んだ動画を作ります。字幕のファイル (.srt) も録画の隣に置きます。後で直した発言は「保存…」→「字幕つきの動画」で作り直せます。"/>
+                                    <CheckBox x:Name="HideOcrCheck" Content="議事録を開いている間、読み取りの画面を隠す" Margin="0,0,0,2" Click="HideOcr_Click"/>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0" ToolTip="アプリの音の大きさ">
+                            <TextBlock Style="{StaticResource Caption}" Text="相手" Margin="0,0,6,0"/>
+                            <ProgressBar x:Name="WindowLevel" Width="64" Height="6" Maximum="1" VerticalAlignment="Center" AutomationProperties.Name="アプリの音の大きさ"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" ToolTip="マイクの音の大きさ">
+                            <TextBlock Style="{StaticResource Caption}" Text="自分" Margin="0,0,6,0"/>
+                            <ProgressBar x:Name="MicLevel" Width="64" Height="6" Maximum="1" VerticalAlignment="Center" AutomationProperties.Name="マイクの音の大きさ"/>
+                        </StackPanel>
+                    </WrapPanel>
+                </StackPanel>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
+                    <Button x:Name="RecordButton" Style="{StaticResource AccentButtonStyle}" MinWidth="150" Padding="16,8"
+                            Click="Record_Click" ToolTip="記録を開始 / 停止します (Ctrl+R)。止めても「記録を再開」で同じ議事録に続けられます">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="RecordIcon" Style="{StaticResource Icon}" Text="&#xE7C8;"/>
+                            <TextBlock x:Name="RecordLabel" Text="記録を開始" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="FileButton" MinWidth="150" Padding="12,5" Margin="0,6,0,0" Click="File_Click"
+                            ToolTip="MP4 などの動画や、MP3・WAV などの音声ファイルを、時刻と話者つきで文字起こしします">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="FileIcon" Style="{StaticResource Icon}" Text="&#xE8E5;"/>
+                            <TextBlock x:Name="FileLabel" Text="ファイルから…" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <ProgressBar x:Name="FileProgress" Height="4" Maximum="1" Margin="0,6,0,0" Visibility="Collapsed"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,0">
+                        <Border x:Name="StateBadge" CornerRadius="9" Padding="8,1" Background="#33808080" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse x:Name="StateDot" Width="7" Height="7" Fill="#808080" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="StateText" Text="準備中" FontSize="11" Margin="5,0,0,0" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock x:Name="ElapsedText" Style="{StaticResource Caption}" Margin="8,0,0,0"
+                                   FontFamily="Consolas, Yu Gothic UI" Text="00:00:00"/>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 発言と話者 -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="320"/>
+                <ColumnDefinition x:Name="SpeakerGapColumn" Width="8"/>
+                <ColumnDefinition x:Name="SpeakerColumn" Width="220" MinWidth="170"/>
+            </Grid.ColumnDefinitions>
+            <!-- 発言と話者の欄の境目: ドラッグで話者の欄の幅を変える (ダブルクリックで元の幅) -->
+            <GridSplitter x:Name="SpeakerSplitter" Grid.Column="1" Width="8" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                          ResizeBehavior="PreviousAndNext" ResizeDirection="Columns" Background="Transparent" Focusable="False"
+                          DragCompleted="SpeakerSplitter_DragCompleted" MouseDoubleClick="SpeakerSplitter_DoubleClick"
+                          ToolTip="ドラッグで話者の欄の幅を変えます (ダブルクリックで元の幅)" AutomationProperties.Name="話者の欄の幅"/>
+
+            <Border Grid.Column="0" Style="{StaticResource Card}">
+                <DockPanel KeyboardNavigation.TabNavigation="Local">
+                <!-- メモ: 書いて Enter で、今の時刻に差し込む (Ctrl+M でここへ) -->
+                <Border DockPanel.Dock="Bottom" Padding="10,6,10,8" BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource CommandPush}" Margin="6,0,0,0" Click="AddMemo_Click" KeyboardNavigation.TabIndex="6"
+                                ToolTip="メモを今の時刻に差し込みます (Enter でも可)">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE710;" FontSize="12"/>
+                                <TextBlock Text="メモ" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Grid>
+                            <TextBox x:Name="MemoBox" KeyDown="MemoBox_KeyDown" TextChanged="MemoBox_TextChanged" KeyboardNavigation.TabIndex="5"
+                                     AutomationProperties.Name="メモ"
+                                     ToolTip="会議中のメモ (「ここで資料を共有」など)。Enter で今の時刻に差し込みます。保存・要約にも入ります"/>
+                            <StackPanel x:Name="MemoHint" Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE70B;" FontSize="12" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                <TextBlock Style="{StaticResource Caption}" Text="メモを書いて Enter (Ctrl+M) ・ 今の時刻に差し込みます" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
+                    </DockPanel>
+                </Border>
+                <!-- 話している途中の暫定の文字 (確定すると上の一覧に入る)。記録中は高さを変えずに 1 行ずつ出す
+                     (話すにつれて高さが変わると、一覧の最新の発言が下に隠れて重なって見えるため) -->
+                <Border x:Name="PartialPanel" DockPanel.Dock="Bottom" Visibility="Collapsed" Padding="10,5,12,5" Margin="8,2,8,6"
+                        CornerRadius="6" Background="{DynamicResource SubtleFillColorSecondaryBrush}"
+                        ToolTip="話している途中の文字です。話し終わると上の一覧に確定して入ります">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Left" CornerRadius="4" Padding="6,1" Margin="0,1,10,0" VerticalAlignment="Top"
+                                Background="{DynamicResource ControlFillColorDefaultBrush}">
+                            <TextBlock Text="確定前" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                        </Border>
+                        <StackPanel x:Name="PartialLines">
+                            <TextBlock x:Name="WinPartial" Style="{StaticResource Caption}" FontSize="{DynamicResource EntrySmallFontSize}"
+                                       FontStyle="Italic" TextWrapping="NoWrap" TextTrimming="None"/>
+                            <TextBlock x:Name="MicPartial" Style="{StaticResource Caption}" FontSize="{DynamicResource EntrySmallFontSize}"
+                                       FontStyle="Italic" TextWrapping="NoWrap" TextTrimming="None"/>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+                <!-- 発言の検索 (Ctrl+F) -->
+                <DockPanel DockPanel.Dock="Top" Margin="10,8,10,2">
+                    <ToggleButton x:Name="MarkedOnlyToggle" DockPanel.Dock="Right" Style="{StaticResource CommandToggle}" Margin="6,0,0,0" KeyboardNavigation.TabIndex="2"
+                                  Click="MarkedOnly_Click" ToolTip="★ を付けた重要な発言だけを表示します">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE735;" FontSize="13"/>
+                            <TextBlock x:Name="MarkedCount" Text="重要" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ToggleButton>
+                    <ToggleButton x:Name="SpeakersToggle" DockPanel.Dock="Right" Style="{StaticResource CommandToggle}" Margin="6,0,0,0"
+                                  Visibility="Collapsed" Click="SpeakersToggle_Click" ToolTip="話者の欄を開く / たたむ (窓が狭いときはたたんでいます)"
+                                  AutomationProperties.Name="話者の欄">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE716;" FontSize="13"/>
+                            <TextBlock Text="話者" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ToggleButton>
+                    <TextBlock x:Name="SearchCount" DockPanel.Dock="Right" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    <Grid>
+                        <TextBox x:Name="SearchBox" TextChanged="SearchBox_TextChanged" KeyDown="SearchBox_KeyDown" KeyboardNavigation.TabIndex="1"
+                                 AutomationProperties.Name="発言を検索"
+                                 ToolTip="発言・日本語訳・話者名から探します (Ctrl+F)。Enter / F3 で次、Shift+Enter / Shift+F3 で前の一致へ。Esc で解除"/>
+                        <StackPanel x:Name="SearchHint" Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" FontSize="12" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                            <TextBlock Style="{StaticResource Caption}" Text="発言を検索 (Ctrl+F)" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                </DockPanel>
+                <!-- AI の要約 (概要・決定事項・やること・主な論点)。書き直せる -->
+                <Border x:Name="SummaryPanel" DockPanel.Dock="Top" Visibility="Collapsed" Margin="10,6,10,2" Padding="12,6,6,8" KeyboardNavigation.TabIndex="3"
+                        CornerRadius="6" Background="{DynamicResource SubtleFillColorSecondaryBrush}">
+                    <DockPanel>
+                        <DockPanel DockPanel.Dock="Top">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button x:Name="SummaryCancelButton" Style="{StaticResource IconButton}" AutomationProperties.Name="要約を作るのをやめる" Content="&#xE711;" Visibility="Collapsed"
+                                        Click="SummaryCancel_Click" ToolTip="要約を作るのをやめる"/>
+                                <Button x:Name="SummaryRedoButton" Style="{StaticResource IconButton}" AutomationProperties.Name="要約を作り直す" Content="&#xE72C;"
+                                        Click="Summarize_Click" ToolTip="今の発言で要約を作り直す"/>
+                                <Button x:Name="SummaryEditButton" Style="{StaticResource IconButton}" AutomationProperties.Name="要約を書き直す" Content="&#xE70F;"
+                                        Click="SummaryEdit_Click" ToolTip="要約を書き直す / 書き直しを終える"/>
+                                <Button x:Name="SummaryCopyButton" Style="{StaticResource IconButton}" AutomationProperties.Name="要約をコピー" Content="&#xE8C8;"
+                                        Click="CopySummary_Click" ToolTip="要約をコピー"/>
+                                <Button x:Name="SummaryFoldButton" Style="{StaticResource IconButton}" AutomationProperties.Name="要約をたたむ・開く" Content="&#xE70E;"
+                                        Click="SummaryFold_Click" ToolTip="要約をたたむ / 開く"/>
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE8FD;" FontSize="13" Margin="0,0,8,0"
+                                       Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"/>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="要約"/>
+                            <TextBlock x:Name="SummaryState" Style="{StaticResource Caption}" Margin="10,0,0,0"
+                                       ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+                        </DockPanel>
+                        <Grid x:Name="SummaryBody" Margin="0,4,0,0">
+                            <!-- 見出しと箇条書きに整えて表示する (「編集」で Markdown のまま書き直せる) -->
+                            <ScrollViewer x:Name="SummaryViewScroll" MaxHeight="240" VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled" Padding="2,0,8,4">
+                                <StackPanel x:Name="SummaryView"/>
+                            </ScrollViewer>
+                            <TextBox x:Name="SummaryBox" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="240" Visibility="Collapsed"
+                                     VerticalScrollBarVisibility="Auto" FontSize="{DynamicResource EntrySmallFontSize}"
+                                     TextChanged="SummaryBox_TextChanged" LostKeyboardFocus="SummaryBox_LostKeyboardFocus" ToolTip="Markdown で書き直せます (### 見出し、- 箇条書き)。保存・コピーにも反映されます"/>
+                            <ProgressBar x:Name="SummaryProgress" VerticalAlignment="Bottom" Height="3" Maximum="1"
+                                         Margin="6,0,6,2" Visibility="Collapsed"/>
+                        </Grid>
+                    </DockPanel>
+                </Border>
+                <Grid>
+                    <ListBox x:Name="EntryList" Background="Transparent" BorderThickness="0" Padding="4" KeyboardNavigation.TabIndex="4"
+                             AutomationProperties.Name="発言の一覧"
+                             HorizontalContentAlignment="Stretch" SelectionMode="Extended"
+                             PreviewKeyDown="EntryList_PreviewKeyDown" PreviewMouseWheel="EntryList_PreviewMouseWheel"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             VirtualizingPanel.ScrollUnit="Pixel">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                <Setter Property="Padding" Value="6,4"/>
+                                <Setter Property="Margin" Value="0"/>
+                                <Setter Property="ContextMenu" Value="{StaticResource EntryMenu}"/>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type local:MinutesEntry}">
+                                <Grid x:Name="Row" Background="Transparent">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto" MinWidth="72"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="22"/>
+                                        <ColumnDefinition Width="28"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding TimeText}" Style="{StaticResource Caption}"
+                                               Width="{DynamicResource EntryTimeWidth}" FontSize="{DynamicResource EntrySmallFontSize}"
+                                               FontFamily="Consolas, Yu Gothic UI" VerticalAlignment="Top" Margin="0,4,0,0"
+                                               Visibility="{Binding Tag, RelativeSource={RelativeSource AncestorType=ListBox}, Converter={StaticResource BoolToVisible}}"
+                                               MouseLeftButtonUp="Time_MouseLeftButtonUp" Cursor="Hand"
+                                               ToolTip="クリックすると、この発言の音声を聞けます (音声を保存した会議・ファイルから作った議事録)"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Speaker.Name}" FontWeight="SemiBold" Margin="0,3,10,0"
+                                               FontSize="{DynamicResource EntryFontSize}"
+                                               VerticalAlignment="Top" MaxWidth="140" TextTrimming="CharacterEllipsis">
+                                        <!-- 話者の色を、テーマの背景で読める明るさにして使う -->
+                                        <TextBlock.Foreground>
+                                            <MultiBinding Converter="{StaticResource SpeakerTextBrush}">
+                                                <Binding Path="Speaker.Color"/>
+                                                <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=ListBox}"/>
+                                            </MultiBinding>
+                                        </TextBlock.Foreground>
+                                    </TextBlock>
+                                    <TextBox Grid.Column="2" Style="{StaticResource EntryText}"
+                                             Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="クリックして書き直せます"/>
+                                    <!-- 日本語以外の発言の日本語訳 (原文の下に出す) -->
+                                    <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding Translation}" Style="{StaticResource Caption}"
+                                               FontSize="{DynamicResource EntrySmallFontSize}" TextWrapping="Wrap" TextTrimming="None" Margin="6,0,4,3"
+                                               Visibility="{Binding HasTranslation, Converter={StaticResource BoolToVisible}}"
+                                               ToolTip="日本語訳 (PC 内の翻訳モデル)"/>
+                                    <!-- 前後の文脈で直した発言の印 (元の文をツールチップに出す) -->
+                                    <TextBlock Grid.Column="3" Style="{StaticResource Icon}" Text="&#xE70F;" FontSize="12"
+                                               VerticalAlignment="Top" Margin="4,5,0,0"
+                                               Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                                               Visibility="{Binding IsCorrected, Converter={StaticResource BoolToVisible}}"
+                                               ToolTip="{Binding CorrectionNote}"/>
+                                    <TextBlock Grid.Column="3" Style="{StaticResource Icon}" Text="&#xE70B;" FontSize="12"
+                                               VerticalAlignment="Top" Margin="4,5,0,0" ToolTip="手で書き込んだメモ"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Visibility="{Binding IsNote, Converter={StaticResource BoolToVisible}}"/>
+                                    <ToggleButton Grid.Column="4" Style="{StaticResource MarkToggle}" VerticalAlignment="Top" Margin="2,0,0,0"
+                                                  AutomationProperties.Name="重要な発言 (★)"
+                                                  IsChecked="{Binding IsMarked, Mode=TwoWay}"/>
+                                </Grid>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsNote}" Value="True">
+                                        <Setter TargetName="Row" Property="Background" Value="#14808080"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsMarked}" Value="True">
+                                        <Setter TargetName="Row" Property="Background" Value="#1FE8A200"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <StackPanel x:Name="EmptyHint" Margin="22,10,22,0" VerticalAlignment="Top" IsHitTestVisible="False" MaxWidth="640"
+                                HorizontalAlignment="Left">
+                        <TextBlock Style="{StaticResource CardTitle}" FontSize="15" Text="議事録の作り方" Margin="0,0,0,8"/>
+                        <ItemsControl x:Name="EmptySteps">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="0,0,0,8">
+                                        <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Margin="0,0,12,0" VerticalAlignment="Top"
+                                                Background="{DynamicResource AccentFillColorDefaultBrush}">
+                                            <TextBlock Text="{Binding Number}" FontWeight="SemiBold" FontSize="12" HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center" Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"/>
+                                        </Border>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                                       TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" TextWrapping="Wrap" TextTrimming="None"
+                                                       Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Border BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="36,0,0,0">
+                            <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" TextTrimming="None" LineHeight="18"
+                                       Text="・会議を記録するときは、参加者の同意を得てください。&#x0a;・スピーカーで聞くとマイクが相手の声も拾うので、ヘッドホンをおすすめします (重複はある程度自動で除きます)。&#x0a;・音声も文字も PC の外に送りません (要約・翻訳も PC の中で行います)。"/>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+                </DockPanel>
+            </Border>
+
+            <Border x:Name="SpeakerCard" Grid.Column="2" Style="{StaticResource Card}" Padding="12,10">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource CardTitle}" Text="話者"/>
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource Caption}" TextWrapping="Wrap" TextTrimming="None" Margin="0,2,0,8"
+                               Text="名前を書き換えて Enter。同じ名前にすると 1 人にまとまります。"/>
+                    <Expander x:Name="SpeakerOptions" DockPanel.Dock="Bottom" Margin="0,8,0,0" Header="聞き分けの調整" IsExpanded="False"
+                              ToolTip="同じ人が 2 人に分かれる・別の人が 1 人にまとまるときに使います">
+                    <!-- 低い窓でも欄が切れて押せなくならないよう、収まらないときはスクロールする -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="0,6,0,0">
+                        <!-- 人数の欄は 1 行を使う (ボタンと並べると、狭い欄で押せないほど細くなっていた) -->
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource Caption}" Text="人数" VerticalAlignment="Center" Margin="0,0,8,0"
+                                       ToolTip="アプリの音声に出てくる人数 (マイクの自分は含めない)。分かっていれば選ぶと、多く分かれすぎるのを防ぎます"/>
+                            <ComboBox x:Name="SpeakerCountBox" Grid.Column="1" MinWidth="0" HorizontalAlignment="Stretch" SelectionChanged="SpeakerCount_Changed"
+                                      AutomationProperties.Name="アプリの音声の人数" ToolTip="アプリの音声に出てくる人数 (マイクの自分は含めない)"/>
+                        </Grid>
+                        <TextBlock Style="{StaticResource Caption}" Text="声の聞き分けの細かさ"/>
+                        <Slider x:Name="ThresholdSlider" Minimum="-1" Maximum="1" Value="0" SmallChange="0.25"
+                                LargeChange="0.5" TickFrequency="0.25" IsSnapToTickEnabled="True" Margin="0,2,0,0"
+                                ValueChanged="Threshold_ValueChanged"
+                                ToolTip="右にするほど細かく分けます (同じ人が複数の話者に分かれるときは左へ)"/>
+                        <DockPanel>
+                            <TextBlock Style="{StaticResource Caption}" Text="まとめる" FontSize="11"/>
+                            <TextBlock Style="{StaticResource Caption}" Text="細かく分ける" FontSize="11" HorizontalAlignment="Right"/>
+                        </DockPanel>
+                        <Button Style="{StaticResource CommandPush}" Padding="6,3" Margin="0,8,0,0" HorizontalAlignment="Left" Click="Voices_Click"
+                                ToolTip="名前を付けた話者の声を覚え、次の会議で似た声の話者に自動で名前を付けます。覚えた声の確認・削除">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE77B;" FontSize="12"/>
+                                <TextBlock x:Name="VoicesLabel" Text="覚えた声" Margin="4,0,0,0" FontSize="12" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                    </ScrollViewer>
+                    </Expander>
+                    <!-- 話者が多いときはこの欄だけスクロールする (マウスのホイールでも動く) -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0"
+                                  PreviewMouseWheel="SpeakerScroll_PreviewMouseWheel">
+                    <ItemsControl x:Name="SpeakerList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type local:MinutesSpeaker}">
+                                <DockPanel Margin="0,0,0,6">
+                                    <Ellipse DockPanel.Dock="Left" Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center"
+                                             Fill="{Binding Color, Converter={StaticResource HexBrush}}"/>
+                                    <!-- 発言時間と全体に占める割合 -->
+                                    <StackPanel DockPanel.Dock="Bottom" Margin="2,4,2,0" ToolTip="発言時間 ・ 全体に占める割合">
+                                        <Grid x:Name="Track" Height="3">
+                                            <Border CornerRadius="1.5" Background="{DynamicResource ControlStrokeColorDefaultBrush}"/>
+                                            <Border HorizontalAlignment="Left" CornerRadius="1.5"
+                                                    Background="{Binding Color, Converter={StaticResource HexBrush}}">
+                                                <Border.Width>
+                                                    <MultiBinding Converter="{StaticResource ShareWidth}">
+                                                        <Binding Path="ShareValue"/>
+                                                        <Binding Path="ActualWidth" ElementName="Track"/>
+                                                    </MultiBinding>
+                                                </Border.Width>
+                                            </Border>
+                                        </Grid>
+                                        <TextBlock Text="{Binding Share}" Style="{StaticResource Caption}" FontSize="11" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <TextBox Text="{Binding Name, UpdateSourceTrigger=LostFocus}" MinWidth="0"
+                                             KeyDown="SpeakerName_KeyDown" GotKeyboardFocus="SpeakerName_GotFocus"
+                                             LostKeyboardFocus="SpeakerName_LostFocus"
+                                             ToolTip="Enter で確定 (すべての発言に反映)、Esc で取り消し。ほかの話者と同じ名前にすると 1 人にまとめます"/>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- 下のバー -->
+        <DockPanel Grid.Row="2" Margin="2,8,0,0">
+            <!-- 状態の案内は 1 行を使って、チェックやボタンに押されて読めなくならないようにする -->
+            <Border x:Name="NoticeBar" DockPanel.Dock="Top" Visibility="Collapsed" CornerRadius="6" BorderThickness="1"
+                    Padding="10,6,4,6" Margin="0,0,0,6">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE711;" FontSize="11" VerticalAlignment="Top"
+                            Click="NoticeClose_Click" ToolTip="閉じる" AutomationProperties.Name="お知らせを閉じる"/>
+                    <Button x:Name="NoticeAction" DockPanel.Dock="Right" Visibility="Collapsed" Padding="12,3" Margin="8,0,4,0"
+                            VerticalAlignment="Center" Click="NoticeAction_Click"/>
+                    <TextBlock x:Name="NoticeIcon" DockPanel.Dock="Left" Style="{StaticResource Icon}" FontSize="14" Margin="0,1,10,0"
+                               VerticalAlignment="Top"/>
+                    <TextBlock x:Name="NoticeText" TextWrapping="Wrap" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" AutomationProperties.LiveSetting="Assertive"/>
+                </DockPanel>
+            </Border>
+            <!-- 長い案内も読めるよう 2 行まで折り返す -->
+            <TextBlock x:Name="StatusText" DockPanel.Dock="Top" Style="{StaticResource Caption}" Margin="0,0,8,6" TextWrapping="Wrap" MaxHeight="36"
+                       AutomationProperties.LiveSetting="Polite"
+                       ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button x:Name="SummarizeButton" Style="{StaticResource CommandPush}" Click="Summarize_Click"
+                        ToolTip="概要・決定事項・やること・主な論点を AI でまとめます (PC 内の AI。会議の内容を外部に送りません)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE8FD;"/>
+                        <TextBlock Text="要約" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Rectangle Width="1" Height="18" Margin="4,0,6,0" VerticalAlignment="Center" Fill="{DynamicResource DividerStrokeColorDefaultBrush}"/>
+                <Button Style="{StaticResource CommandPush}" Click="Open_Click"
+                        ToolTip="最近の議事録や、保存した議事録 (別の PC で作ったものも) を開きます。話者の名前を直したりして保存し直せます (Ctrl+O)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE838;"/>
+                        <TextBlock Text="開く…" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource CommandPush}" Click="New_Click" ToolTip="今の議事録を閉じて新しく始める">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE710;"/>
+                        <TextBlock Text="新規" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource CommandPush}" Click="Copy_Click" ToolTip="議事録をテキストとしてコピー (要約があれば先頭に入ります)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE8C8;"/>
+                        <TextBlock Text="コピー" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource CommandPush}" Click="Save_Click" ToolTip="Word (.docx)・議事録プロジェクト (.gettext、音声入り)・テキスト (.txt)・Markdown (.md)・字幕 (.srt / .vtt)・議事録データ (.json)・字幕つきの動画 (.mp4) で保存 (Ctrl+S)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE74E;"/>
+                        <TextBlock Text="保存…" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <ToggleButton x:Name="ViewButton" Style="{StaticResource CommandToggle}" ToolTip="時刻・日本語訳・相づち・自動スクロールの表示を切り替えます">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE890;"/>
+                        <TextBlock x:Name="ViewLabel" Text="表示" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE70E;" FontSize="10" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </ToggleButton>
+                <Popup x:Name="ViewPopup" Opened="Popup_Opened" PreviewKeyDown="Popup_PreviewKeyDown" PlacementTarget="{Binding ElementName=ViewButton}" Placement="Top"
+                       StaysOpen="False" AllowsTransparency="True" IsOpen="{Binding IsChecked, ElementName=ViewButton, Mode=TwoWay}">
+                    <Border Background="{DynamicResource ApplicationBackgroundBrush}" BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                            BorderThickness="1" CornerRadius="8" Padding="14,10" Margin="0,0,0,4">
+                        <StackPanel>
+                        <CheckBox x:Name="AutoScrollCheck" Content="自動スクロール" MinWidth="0" Margin="0,3"
+                                  Click="AutoScrollCheck_Click"
+                                  ToolTip="新しい発言が加わるたびに一番下 (最新) までスクロールします。発言を書き直している間は止まります"/>
+                        <CheckBox x:Name="TimeCheck" Content="時刻" MinWidth="0" Margin="0,3" Click="TimeCheck_Click"
+                                  ToolTip="発言の時刻 (ファイルでは先頭からの時間) を表示し、コピー・保存にも含めます"/>
+                        <CheckBox x:Name="TranslateCheck" Content="日本語訳" MinWidth="0" Margin="0,3" Click="TranslateCheck_Click"
+                                  ToolTip="英語など日本語以外の発言に、日本語訳を原文とセットで付けます (コピー・保存にも含めます)。翻訳は PC 内のモデルで行い、会議の内容を外部に送りません"/>
+                        <CheckBox x:Name="FillerCheck" Content="相づちを除く" MinWidth="0" Margin="0,3" Click="FillerCheck_Click"
+                                  ToolTip="「はい」「なるほど」「えーと」など、相づち・言いよどみだけの発言を画面とコピー・保存から除きます (消さずに隠すだけなので、外すと戻ります)"/>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+                <!-- 文字の画面と同じ設定の画面を、議事録のページで開く (文字の大きさ・表示・AI の訳・声を覚える) -->
+                <Button x:Name="SettingsButton" Style="{StaticResource CommandPush}" Click="Settings_Click" Margin="2,0,0,0"
+                        ToolTip="設定 (文字の大きさ・表示・日本語訳・声を覚える など)" AutomationProperties.Name="設定">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE713;"/>
+                        <TextBlock Text="設定" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </DockPanel>
+
+        <!-- 準備中の表示: 音声認識のモデルを読み込んでいる間 (読み込み中も「裏で準備」で閉じて操作できる) -->
+        <Border x:Name="LoadingOverlay" Grid.RowSpan="3" Visibility="Collapsed" CornerRadius="8" Margin="-4"
+                Background="{DynamicResource SmokeFillColorDefaultBrush}">
+            <Border Style="{StaticResource Card}" Background="{DynamicResource SolidBackgroundFillColorBaseBrush}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" Width="460" Padding="26,22,26,18">
+                <StackPanel>
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE720;" FontSize="22" Margin="0,0,12,0"
+                                   Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"/>
+                        <TextBlock x:Name="LoadingTitle" Text="議事録の準備をしています" FontSize="18" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}" VerticalAlignment="Center"/>
+                    </DockPanel>
+                    <TextBlock x:Name="LoadingNote" Style="{StaticResource Caption}" TextWrapping="Wrap" TextTrimming="None" Margin="0,8,0,14"
+                               Text="音声認識の AI を読み込んでいます。準備ができると、この表示は自動で消えます。"/>
+                    <ItemsControl x:Name="LoadingSteps">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type local:LoadStep}">
+                                <DockPanel Margin="0,5">
+                                    <TextBlock x:Name="StepIcon" DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="{Binding Icon}" FontSize="14"
+                                               Width="18" TextAlignment="Center" Margin="0,0,12,0" RenderTransformOrigin="0.5,0.5"
+                                               Foreground="{DynamicResource TextFillColorTertiaryBrush}">
+                                        <TextBlock.RenderTransform><RotateTransform/></TextBlock.RenderTransform>
+                                    </TextBlock>
+                                    <TextBlock x:Name="StepTime" DockPanel.Dock="Right" Text="{Binding TimeText}" Style="{StaticResource Caption}"
+                                               FontFamily="Consolas, Yu Gothic UI"/>
+                                    <TextBlock x:Name="StepTitle" Text="{Binding Title}" VerticalAlignment="Center" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                </DockPanel>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding State}" Value="active">
+                                        <Setter TargetName="StepIcon" Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}"/>
+                                        <Setter TargetName="StepTitle" Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+                                        <Setter TargetName="StepTitle" Property="FontWeight" Value="SemiBold"/>
+                                        <DataTrigger.EnterActions>
+                                            <BeginStoryboard x:Name="Spin">
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetName="StepIcon"
+                                                                     Storyboard.TargetProperty="(TextBlock.RenderTransform).(RotateTransform.Angle)"
+                                                                     From="0" To="360" Duration="0:0:1.2" RepeatBehavior="Forever"/>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </DataTrigger.EnterActions>
+                                        <DataTrigger.ExitActions>
+                                            <StopStoryboard BeginStoryboardName="Spin"/>
+                                        </DataTrigger.ExitActions>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding State}" Value="done">
+                                        <Setter TargetName="StepIcon" Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}"/>
+                                        <Setter TargetName="StepTitle" Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding State}" Value="failed">
+                                        <Setter TargetName="StepIcon" Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}"/>
+                                        <Setter TargetName="StepTitle" Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <ProgressBar x:Name="LoadingBar" IsIndeterminate="True" Height="3" Margin="0,14,0,0"/>
+                    <DockPanel Margin="0,12,0,0">
+                        <Button x:Name="LoadingHideButton" DockPanel.Dock="Right" Content="裏で準備" Padding="14,5" Click="LoadingHide_Click"
+                                ToolTip="この表示を閉じます。準備は続き、終わると下の欄に「準備完了」と出ます"/>
+                        <Button x:Name="LoadingRetryButton" DockPanel.Dock="Right" Content="もう一度試す" Padding="14,5" Margin="0,0,8,0"
+                                Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}" Click="LoadingRetry_Click"/>
+                        <Button x:Name="LoadingSetupButton" DockPanel.Dock="Right" Content="セットアップを開く" Padding="14,5" Margin="0,0,8,0"
+                                Visibility="Collapsed" Click="OpenSetup_Click"/>
+                        <TextBlock x:Name="LoadingElapsed" Style="{StaticResource Caption}" VerticalAlignment="Center" TextWrapping="Wrap"
+                                   TextTrimming="None"/>
+                    </DockPanel>
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
+</Window>

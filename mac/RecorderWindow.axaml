@@ -1,0 +1,78 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="GetText.RecorderWindow"
+        Title="GetText — 画面の録画" Width="580" SizeToContent="Height" MinWidth="480" CanResize="False"
+        Icon="avares://GetText/Assets/app.ico">
+    <StackPanel Margin="12,10,12,12">
+        <!-- 録画するもの -->
+        <Border Classes="card" Padding="14,12">
+            <StackPanel>
+                <TextBlock Classes="caption" Text="録画するウィンドウ (🔊 = いま音を出しているアプリ)" Margin="0,0,0,4"/>
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Classes="command" Content="⟳" Margin="6,0,0,0" Click="Refresh_Click"
+                            ToolTip.Tip="ウィンドウの一覧を読み直す"/>
+                    <ComboBox x:Name="TargetBox" HorizontalAlignment="Stretch" SelectionChanged="TargetBox_SelectionChanged"/>
+                </DockPanel>
+                <WrapPanel Margin="0,10,0,0">
+                    <CheckBox x:Name="AudioCheck" Content="このアプリの音も録音する" Margin="0,0,18,4" Click="Option_Click"
+                              ToolTip.Tip="選んだアプリが再生している音を録音します。画面全体を選んだときは GetText 以外のすべての音"/>
+                </WrapPanel>
+                <WrapPanel Margin="0,6,0,0">
+                    <TextBlock Classes="caption" Text="画質" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox x:Name="QualityBox" Width="190" Margin="0,0,18,4" SelectionChanged="Option_Changed"/>
+                    <TextBlock Classes="caption" Text="なめらかさ" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox x:Name="FpsBox" Width="130" Margin="0,0,0,4" SelectionChanged="Option_Changed"/>
+                </WrapPanel>
+                <DockPanel Margin="0,8,0,0">
+                    <Button DockPanel.Dock="Right" Classes="command" Content="開く" Click="OpenFolder_Click" ToolTip.Tip="保存先のフォルダーを開く"/>
+                    <Button DockPanel.Dock="Right" Classes="command" Content="変更…" Click="ChangeFolder_Click" ToolTip.Tip="保存先のフォルダーを変える"/>
+                    <TextBlock Classes="caption" Text="保存先" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock x:Name="FolderText" Classes="caption" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                </DockPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- プレビュー (録画する前も、録画中も、選んだウィンドウを映す) -->
+        <Border Classes="card" Padding="10,8,10,10" Margin="0,8,0,0">
+            <DockPanel>
+                <DockPanel DockPanel.Dock="Top" Margin="2,0,0,6">
+                    <CheckBox x:Name="PreviewCheck" DockPanel.Dock="Right" Content="表示する" MinWidth="0" Click="PreviewCheck_Click"
+                              ToolTip.Tip="プレビューを出す / 止める (止めると少し軽くなります)"/>
+                    <TextBlock Classes="caption" Text="プレビュー" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="PreviewSize" Classes="caption" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                </DockPanel>
+                <Border x:Name="PreviewFrame" Height="250" CornerRadius="6" Background="#FF1E1E1E" ClipToBounds="True">
+                    <Grid>
+                        <Image x:Name="PreviewImage" Stretch="Uniform"/>
+                        <TextBlock x:Name="PreviewHint" Foreground="#FFB0B0B0" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   TextAlignment="Center" TextWrapping="Wrap" Margin="16" Text="録画するウィンドウを選ぶと、ここに映ります"/>
+                    </Grid>
+                </Border>
+            </DockPanel>
+        </Border>
+
+        <!-- 録画 -->
+        <Border Classes="card" Padding="14,12" Margin="0,8,0,0">
+            <DockPanel>
+                <Button x:Name="RecordButton" DockPanel.Dock="Left" Classes="accent" MinWidth="160" Padding="16,8" Click="Record_Click">
+                    <TextBlock x:Name="RecordLabel" Text="● 録画を開始" FontWeight="SemiBold"/>
+                </Button>
+                <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
+                    <TextBlock x:Name="ElapsedText" Text="00:00:00" FontFamily="Menlo, monospace" FontSize="18"/>
+                    <TextBlock x:Name="SizeText" Classes="caption" Margin="0,2,0,0"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <TextBlock x:Name="StatusText" Classes="caption" TextWrapping="Wrap" TextTrimming="None" Margin="4,8,4,0"/>
+        <DockPanel x:Name="LastPanel" Margin="0,6,0,0" IsVisible="False">
+            <Button DockPanel.Dock="Right" Classes="command" Content="Finder で表示" Click="ShowLast_Click"/>
+            <Button DockPanel.Dock="Right" Classes="command" Content="▶ 再生" Click="PlayLast_Click"/>
+            <TextBlock x:Name="LastText" VerticalAlignment="Center" Margin="4,0,8,0" TextTrimming="CharacterEllipsis"/>
+        </DockPanel>
+        <Border BorderBrush="{DynamicResource Divider}" BorderThickness="0,1,0,0" Margin="0,10,0,0" Padding="4,8,4,0">
+            <TextBlock Classes="caption" TextWrapping="Wrap" TextTrimming="None"
+                       Text="・会議を録画するときは、参加者の同意を得てください。&#x0a;・ほかの窓の後ろにあっても録画できます。最小化している間は止まった画面になります。&#x0a;・初めて使うときは「画面収録とシステムオーディオ録音」の許可が要ります。取り込みを禁止しているウィンドウ (著作権保護の動画など) は録画できません。"/>
+        </Border>
+    </StackPanel>
+</Window>

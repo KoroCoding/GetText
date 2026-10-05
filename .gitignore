@@ -1,0 +1,17 @@
+bin/
+obj/
+publish/
+*.user
+.vs/
+__pycache__/
+setup.log
+docs/_video_work/
+tools/voicevox/
+
+# 配布用の ZIP (tools\make_release.ps1 と Mac の CI で作り、このフォルダーに置く。リポジトリには入れない)
+/GetText_配布版.zip
+/GetText-mac-*.zip
+
+# 新しいリポジトリ (GetText だけ) の GitHub Actions の結果などを手元に取ったとき
+/GetText-windows-x64.zip
+*.py[cod]

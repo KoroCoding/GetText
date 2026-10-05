@@ -1,0 +1,63 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="GetText.CaptureWindow"
+        Title="GetText 読み取り枠"
+        SystemDecorations="None" Background="Transparent" TransparencyLevelHint="Transparent"
+        CanResize="False" Topmost="True" ShowInTaskbar="False" ShowActivated="False"
+        MinWidth="140" MinHeight="90" Width="520" Height="320" FontSize="12">
+    <Window.Styles>
+        <Style Selector="Button.bar">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="CornerRadius" Value="0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.bar:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#33FFFFFF"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+    </Window.Styles>
+    <Grid RowDefinitions="24,*">
+        <!-- ドラッグで移動するバー -->
+        <Border x:Name="TopBar" Grid.Row="0" Background="#2B6CB0" CornerRadius="4,4,0,0"
+                PointerPressed="TopBar_PointerPressed" ToolTip.Tip="ドラッグで移動 / 右下の角をドラッグでサイズ変更">
+            <DockPanel LastChildFill="False">
+                <!-- ボタンを先に置く (狭い枠・長い題名でも、一時停止と終了のボタンが押せるように) -->
+                <Button DockPanel.Dock="Right" Classes="bar" Content="✕" ToolTip.Tip="終了" Click="Close_Click"/>
+                <Button x:Name="PauseButton" DockPanel.Dock="Right" Classes="bar" Content="❚❚" FontSize="9"
+                        ToolTip.Tip="一時停止" Click="Pause_Click"/>
+                <TextBlock x:Name="TitleText" TextTrimming="CharacterEllipsis" Text="GetText" Foreground="White" FontWeight="SemiBold"
+                           VerticalAlignment="Center" Margin="8,0,6,0"/>
+                <TextBlock x:Name="SizeText" TextTrimming="CharacterEllipsis" Foreground="#DDFFFFFF" VerticalAlignment="Center"/>
+            </DockPanel>
+        </Border>
+
+        <!-- 縁: 外側は半透明 (つかみ代)、内側は実線。中は透明で、クリックは下の窓に通る -->
+        <Border Grid.Row="1" x:Name="OuterFrame" BorderThickness="3,0,3,3" BorderBrush="#552B6CB0" CornerRadius="0,0,4,4">
+            <Border x:Name="InnerFrame" BorderThickness="2,0,2,2" BorderBrush="#2B6CB0">
+                <Panel x:Name="CaptureArea"/>
+            </Border>
+        </Border>
+
+        <!-- 右下のサイズ変更の角 -->
+        <Path x:Name="Grip" Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,1,1"
+              Fill="#2B6CB0" Data="M 16,0 L 16,16 L 0,16 Z" IsHitTestVisible="False"/>
+        <Border x:Name="GripArea" Grid.Row="1" Width="20" Height="20" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                Background="#01000000" Cursor="BottomRightCorner" ToolTip.Tip="ドラッグでサイズ変更"
+                PointerPressed="Grip_PointerPressed" PointerMoved="Grip_PointerMoved" PointerReleased="Grip_PointerReleased"/>
+        <!-- 右と下の縁でもサイズを変えられる -->
+        <Border x:Name="RightEdge" Grid.Row="1" Width="6" HorizontalAlignment="Right" Margin="0,0,0,20"
+                Background="#01000000" Cursor="RightSide"
+                PointerPressed="Grip_PointerPressed" PointerMoved="Grip_PointerMoved" PointerReleased="Grip_PointerReleased"/>
+        <Border x:Name="BottomEdge" Grid.Row="1" Height="6" VerticalAlignment="Bottom" Margin="0,0,20,0"
+                Background="#01000000" Cursor="BottomSide"
+                PointerPressed="Grip_PointerPressed" PointerMoved="Grip_PointerMoved" PointerReleased="Grip_PointerReleased"/>
+    </Grid>
+</Window>

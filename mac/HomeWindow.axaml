@@ -1,0 +1,93 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="GetText.HomeWindow"
+        Title="GetText" Width="500" SizeToContent="Height" CanResize="False" WindowStartupLocation="CenterScreen"
+        Icon="avares://GetText/Assets/app.ico">
+    <Window.Styles>
+        <Style Selector="Border.feature">
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Margin" Value="0,0,14,0"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+            <Setter Property="Background" Value="{DynamicResource SystemAccentColor}"/>
+        </Style>
+        <Style Selector="Border.feature > TextBlock">
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style Selector="Border.chip">
+            <Setter Property="CornerRadius" Value="9"/>
+            <Setter Property="Padding" Value="8,1"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Background" Value="#2216A34A"/>
+        </Style>
+    </Window.Styles>
+    <StackPanel Margin="14,12,14,12">
+        <StackPanel Margin="2,0,2,12">
+            <TextBlock Text="GetText" FontSize="20" FontWeight="SemiBold"/>
+            <TextBlock Classes="caption" Text="使う機能を選んでください (いくつでも同時に開けます。ここで切り替えられます)" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <Border Classes="card" Padding="14,12" Margin="0,0,0,8">
+            <DockPanel>
+                <Border Classes="feature"><TextBlock Text="文"/></Border>
+                <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center" Margin="10,0,0,0">
+                    <Button x:Name="OcrOpen" Classes="accent" MinWidth="96" HorizontalContentAlignment="Center" Content="開く" Click="OcrOpen_Click"/>
+                    <Button x:Name="OcrClose" MinWidth="96" HorizontalContentAlignment="Center" Margin="0,6,0,0" Content="閉じる" IsVisible="False" Click="OcrClose_Click"/>
+                </StackPanel>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Classes="title" Text="文字の読み取りと翻訳"/>
+                        <Border x:Name="OcrChip" Classes="chip" IsVisible="False"><TextBlock Text="開いています" FontSize="11" Foreground="#15803D"/></Border>
+                    </StackPanel>
+                    <TextBlock Classes="caption" TextWrapping="Wrap" Margin="0,3,0,0" Text="画面に置いた枠の中の文字を読み取り、日本語に訳します。"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Border Classes="card" Padding="14,12" Margin="0,0,0,8">
+            <DockPanel>
+                <Border Classes="feature"><TextBlock Text="🎙"/></Border>
+                <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center" Margin="10,0,0,0">
+                    <Button x:Name="MinutesOpen" Classes="accent" MinWidth="96" HorizontalContentAlignment="Center" Content="開く" Click="MinutesOpen_Click"/>
+                    <Button x:Name="MinutesClose" MinWidth="96" HorizontalContentAlignment="Center" Margin="0,6,0,0" Content="閉じる" IsVisible="False" Click="MinutesClose_Click"/>
+                </StackPanel>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Classes="title" Text="議事録"/>
+                        <Border x:Name="MinutesChip" Classes="chip" IsVisible="False"><TextBlock x:Name="MinutesChipText" Text="開いています" FontSize="11" Foreground="#15803D"/></Border>
+                    </StackPanel>
+                    <TextBlock Classes="caption" TextWrapping="Wrap" Margin="0,3,0,0" Text="会議アプリの音声を文字起こしして、話者と時刻つきの議事録を作ります。"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Border Classes="card" Padding="14,12" Margin="0,0,0,8">
+            <DockPanel>
+                <Border Classes="feature"><TextBlock Text="●"/></Border>
+                <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center" Margin="10,0,0,0">
+                    <Button x:Name="RecordOpen" Classes="accent" MinWidth="96" HorizontalContentAlignment="Center" Content="開く" Click="RecordOpen_Click"/>
+                    <Button x:Name="RecordClose" MinWidth="96" HorizontalContentAlignment="Center" Margin="0,6,0,0" Content="閉じる" IsVisible="False" Click="RecordClose_Click"/>
+                </StackPanel>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Classes="title" Text="画面の録画"/>
+                        <Border x:Name="RecordChip" Classes="chip" IsVisible="False"><TextBlock x:Name="RecordChipText" Text="開いています" FontSize="11" Foreground="#15803D"/></Border>
+                    </StackPanel>
+                    <TextBlock Classes="caption" TextWrapping="Wrap" Margin="0,3,0,0" Text="選んだウィンドウ (または画面全体) を、その音も入れて MP4 に録画します。"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <DockPanel Margin="2,4,0,0">
+            <Button DockPanel.Dock="Right" Classes="command" Content="終了" Click="Exit_Click" ToolTip.Tip="GetText を終了します (⌘Q)"/>
+            <Button DockPanel.Dock="Right" Classes="command" Content="⚙ 設定" Click="Settings_Click" ToolTip.Tip="設定 (⌘,)"/>
+            <CheckBox x:Name="MinimizeCheck" Content="開いたらこの画面をしまう" VerticalAlignment="Center" Click="MinimizeCheck_Click"
+                      ToolTip.Tip="機能を開くと、この画面を Dock にしまいます (機能をすべて閉じると戻ります)"/>
+        </DockPanel>
+    </StackPanel>
+</Window>
