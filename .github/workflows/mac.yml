@@ -192,14 +192,19 @@ jobs:
           du -sh results/* || true
 
       - name: 結果をブランチに置く
-        if: always()
+        # (タグの実行は main の実行と同じ中身で、同時に置こうとしてぶつかるので置かない)
+        if: always() && !startsWith(github.ref, 'refs/tags/')
         run: |
           cd results
           git init -q
           git checkout -q -b ci/mac-results
           git add -A
           git -c user.name="gettext-ci" -c user.email="gettext-ci@users.noreply.github.com" commit -qm "GetText Mac ${{ github.sha }}"
-          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:ci/mac-results
+          # (ほかの実行と同時に置こうとして断られたときは、少し待ってやり直す)
+          for i in 1 2 3; do
+            git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:ci/mac-results && break
+            sleep 10
+          done
 
       - name: Releases に置く (タグのとき)
         if: startsWith(github.ref, 'refs/tags/') && steps.build_arm.outcome == 'success'
