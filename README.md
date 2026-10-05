@@ -1,5 +1,15 @@
 # GetText
 
+> **English summary**
+>
+> GetText is a free, open-source desktop app for Windows and macOS that (1) reads text on the screen inside a movable frame (OCR) and translates it into Japanese, (2) turns meeting audio into minutes with timestamps, speakers and summaries, and (3) records a selected window together with its audio. All processing — OCR, translation, speech recognition, summarization and recording — runs locally on the user's PC.
+>
+> - **Download:** [GitHub Releases](https://github.com/KoroCoding/GetText/releases) — `GetText-windows-x64.zip` (Windows 10 2004+ / 11, 64-bit) and `GetText-mac-arm64.zip` / `GetText-mac-x64.zip` (macOS). Unzip and run `setup.bat` (Windows); the setup downloads Python and the AI models.
+> - **Code signing:** Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/) (applied for; releases before approval are unsigned). Only binaries built from this repository by GitHub Actions are signed. Committers, reviewers and approvers: [KoroCoding](https://github.com/KoroCoding).
+> - **Privacy:** This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it (optional online translation via Google or DeepL, and downloads during setup). No telemetry is collected.
+> - **Uninstall:** run `uninstall.bat`, then delete the folder.
+> - **License:** [GPL-3.0-or-later](LICENSE). AI models downloaded at setup keep their own licenses (see "ライセンス" below; the optional NLLB-200 model is CC BY-NC 4.0).
+
 画面の上に中が透明な「読み取り枠」を出し、枠の中の文字をリアルタイムに読み取って、右側のウィンドウにテキストとして表示するアプリです。外国語の文は日本語訳も並べて表示します。会議などの音声を、時刻と話者つきの議事録にもできます。選んだウィンドウを、その音も入れて録画することもできます。Windows 版と Mac 版があります (Mac 版は「Mac で使う」を参照)。
 
 起動すると **機能を選ぶ画面** が出ます。「文字の読み取りと翻訳」「議事録」「画面の録画」から使うものを「開く」で開きます (いくつでも同時に開けます)。開いている機能は「前に出す」「閉じる」で切り替えられ、GetText の終了・設定もこの画面から行います。機能を開くとこの画面はタスクバーにしまわれ (チェックで変えられます)、機能をすべて閉じると戻ります。読み取り枠や文字の画面の ✕ は「文字の読み取りを閉じる」で、GetText は終わりません。
