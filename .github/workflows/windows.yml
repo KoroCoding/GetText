@@ -84,5 +84,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "GetText $GITHUB_REF_NAME" --notes "README の「別の PC で使う」を参照してください。"
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "GetText $GITHUB_REF_NAME" --notes "README の「別の PC で使う」「Mac で使う」を参照してください。" || true
           gh release upload "$GITHUB_REF_NAME" GetText-windows-x64.zip --clobber

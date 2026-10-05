@@ -201,6 +201,15 @@ jobs:
           git -c user.name="gettext-ci" -c user.email="gettext-ci@users.noreply.github.com" commit -qm "GetText Mac ${{ github.sha }}"
           git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:ci/mac-results
 
+      - name: Releases に置く (タグのとき)
+        if: startsWith(github.ref, 'refs/tags/') && steps.build_arm.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # (Windows の実行と同時に作ろうとして片方が失敗しても、続けて置く)
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "GetText $GITHUB_REF_NAME" --notes "README の「別の PC で使う」「Mac で使う」を参照してください。" || true
+          gh release upload "$GITHUB_REF_NAME" out/GetText-mac-*.zip --clobber
+
       # 確認のどれかが失敗したら、実行の結果を「失敗」にする (各ステップは結果を残すため失敗しても続けている)
       - name: 判定
         if: always()
