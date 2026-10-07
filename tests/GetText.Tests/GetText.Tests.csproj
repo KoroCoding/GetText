@@ -18,6 +18,16 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\GetText.csproj" />
+    <!-- 拡張機能を読み込むテストで使う (ビルドの順だけ。出力は参照しない) -->
+    <ProjectReference Include="..\..\plugins\GetText.Plugin.Sample\GetText.Plugin.Sample.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\TestPlugins\GetText.Plugin.Faulty\GetText.Plugin.Faulty.csproj" ReferenceOutputAssembly="false" />
+    <!-- 公式の拡張機能: 中の処理 (照合など) を直接テストし、読み込みのテストではパッケージにして入れる -->
+    <ProjectReference Include="..\..\plugins\GetText.Plugin.KeywordMonitor\GetText.Plugin.KeywordMonitor.csproj" />
+    <ProjectReference Include="..\..\plugins\GetText.Plugin.Presentation\GetText.Plugin.Presentation.csproj" />
+    <ProjectReference Include="..\..\plugins\GetText.Plugin.History\GetText.Plugin.History.csproj" />
+    <ProjectReference Include="..\..\plugins\GetText.Plugin.DocumentOcr\GetText.Plugin.DocumentOcr.csproj" />
+    <ProjectReference Include="..\..\plugins\GetText.Plugin.Barcode\GetText.Plugin.Barcode.csproj" />
+    <ProjectReference Include="..\..\plugins\GetText.Plugin.TranslationOverlay\GetText.Plugin.TranslationOverlay.csproj" />
   </ItemGroup>
 
   <ItemGroup>

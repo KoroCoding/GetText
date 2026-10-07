@@ -125,12 +125,71 @@ public partial class App : Application
             }
             _text?.SaveOnShutdown();
         };
+        // 拡張機能: ホームを出した後に読み込む (起動を遅くしない)。終えるときは各拡張機能を 2 秒まで待つ
+        if (!DemoMode && Program.SmokeReport == null)
+        {
+            var text = _text;
+            if (text != null) MacPluginHost.Start(desktop.Args ?? [], text, () => text.OpenSettings(SettingsPage.Extensions, Home));
+            desktop.Exit += (_, _) =>
+            {
+                PluginRuntime.ShutdownAll();
+                DeveloperApiControl.Stop();
+                if (_restartRequested) StartAgain();
+            };
+        }
         if (Program.SmokeReport is { } report && _text != null)
             Dispatcher.UIThread.Post(() => _ = SmokeTest.RunAsync(_text, report, desktop));
     }
 
     private bool _quitConfirmed;
     private bool _quitting;
+    private static bool _restartRequested;
+
+    /// <summary>
+    /// GetText を再起動する (拡張機能の変更を反映する)。録画・議事録の記録中は止めてからにしてもらう
+    /// (終了の確認を取り消されたときに、後の普通の終了で再起動しないように)。
+    /// </summary>
+    internal static async void Restart()
+    {
+        if (Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop || Current is not App app) return;
+        if (Home?.Recorder is { IsBusy: true } || app._text?.Minutes is { IsBusy: true })
+        {
+            if (Home != null) await Dialogs.AlertAsync(Home, "録画・議事録の記録を止めてから再起動してください。", "GetText");
+            return;
+        }
+        _restartRequested = true;
+        if (!desktop.TryShutdown()) _restartRequested = false;
+    }
+
+    /// <summary>終わった後に、もう一度起動する (.app の中なら open -n、そうでなければ実行ファイル)。</summary>
+    private static void StartAgain()
+    {
+        try
+        {
+            var dir = new DirectoryInfo(AppContext.BaseDirectory.TrimEnd('/'));
+            var bundle = dir.Parent?.Parent; // GetText.app/Contents/MacOS
+            System.Diagnostics.ProcessStartInfo info;
+            if (bundle != null && bundle.Name.EndsWith(".app", StringComparison.Ordinal))
+            {
+                info = new System.Diagnostics.ProcessStartInfo("open") { UseShellExecute = false };
+                info.ArgumentList.Add("-n");
+                info.ArgumentList.Add(bundle.FullName);
+            }
+            else if (Environment.ProcessPath is { } exe)
+            {
+                info = new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = false };
+            }
+            else
+            {
+                return;
+            }
+            System.Diagnostics.Process.Start(info)?.Dispose();
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
+        {
+            Log("Restart", ex);
+        }
+    }
 
     // Mac のメニューバー (GetText メニュー) に「設定…」「議事録」を加える
     private void BuildMenu(TextWindow text)

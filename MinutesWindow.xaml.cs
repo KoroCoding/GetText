@@ -245,6 +245,7 @@ public partial class MinutesWindow : Window
     public MinutesWindow(TextWindow host, AppSettings settings)
     {
         InitializeComponent();
+        Topmost = settings.MinutesTopmost; // (設定 → 議事録 の「常に手前に表示」)
         _host = host;
         _settings = settings;
         ApplyFontSize();

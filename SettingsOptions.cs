@@ -46,6 +46,7 @@ public enum SettingsPage
     Meetings,
     Recording,
     Models,
+    Extensions,
     Diagnostics,
 }
 

@@ -112,6 +112,7 @@ public static class AppCommands
         Registry.Register(new AppCommand { Id = "ocr.copyTranslation", Title = "日本語訳をコピー", Keywords = ["Copy", "translation"], Icon = AppIcon.Copy, Shortcut = "Ctrl+Shift+T", Contexts = ocr, IsAvailable = () => OcrOpen() && settings.Translate, Execute = text.CopyTranslation });
         Registry.Register(new AppCommand { Id = "ocr.pin", Title = "常に手前に表示 (切り替え)", Keywords = ["Pin", "Topmost", "always on top", "固定"], Icon = AppIcon.Pin, Contexts = ocr, IsAvailable = OcrOpen, Execute = text.TogglePin });
         Registry.Register(new AppCommand { Id = "ocr.close", Title = "文字の読み取りを閉じる", Keywords = ["Close OCR"], Icon = AppIcon.Close, IsAvailable = OcrOpen, Execute = text.CloseOcr });
+        Registry.Register(new AppCommand { Id = "ocr.quick", Title = "範囲を選んで文字をコピー (Quick OCR)", Subtitle = "読み取りの画面を開かずに 1 回だけ読む", Keywords = ["Quick OCR", "Silent OCR", "範囲", "スクリーンショット", "コピー"], Icon = AppIcon.ScreenOcr, Shortcut = HotkeyText.For(settings, "quick-ocr"), Execute = QuickOcr.Run });
 
         // 議事録
         CommandContext[] meeting = [CommandContext.Meeting];
@@ -156,6 +157,7 @@ public static class AppCommands
         (SettingsPage.Meetings, "議事録", ["Meetings", "Minutes", "会議"], AppIcon.Meeting),
         (SettingsPage.Recording, "画面の録画", ["Recording", "録画", "保存先"], AppIcon.Recording),
         (SettingsPage.Models, "モデルとセットアップ", ["Models", "Setup", "インストール", "AI"], AppIcon.Model),
+        (SettingsPage.Extensions, "拡張機能", ["Extensions", "Plugins", "プラグイン", "アドオン", "追加"], AppIcon.Extensions),
         (SettingsPage.Diagnostics, "診断", ["Diagnostics", "ログ", "バージョン", "about"], AppIcon.Diagnostics),
     ];
 

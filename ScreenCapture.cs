@@ -40,6 +40,13 @@ internal static class ScreenCapture
             biBitCount = 32,
         };
         IntPtr bitmap = CreateDIBSection(screenDc, ref header, 0, out IntPtr bits, IntPtr.Zero, 0);
+        if (bitmap == IntPtr.Zero || bits == IntPtr.Zero)
+        {
+            // (大きすぎる範囲・メモリ不足など: 落ちずに例外にする。読み取りは次の周期で試し直す)
+            DeleteDC(memDc);
+            ReleaseDC(IntPtr.Zero, screenDc);
+            throw new InvalidOperationException("画面を取り込む画像を用意できませんでした");
+        }
         IntPtr old = SelectObject(memDc, bitmap);
         try
         {

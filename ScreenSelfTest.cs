@@ -42,7 +42,7 @@ internal static class ScreenSelfTest
 
         AppSettings NewSettings(bool follow) => new()
         {
-            OcrEngine = OcrEngineKind.Ai, Translate = false, Follow = follow, Topmost = false, HideOcrDuringMinutes = false,
+            OcrEngine = OcrEngineKind.Ai, Translate = false, Follow = follow, TextTopmost = false, HideOcrDuringMinutes = false,
         };
 
         // 1. 拡大率の違うモニターに置いた枠と文字の画面を閉じて開き直すと、同じ場所・同じ大きさに戻る

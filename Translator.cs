@@ -40,6 +40,9 @@ public sealed class Translator
     private readonly DeepLTranslator _deepl = new();
     private readonly LocalTranslator _local = new();
 
+    /// <summary>この PC の中の翻訳 (拡張機能にも、同じ補助プロセスで使ってもらう)。</summary>
+    public LocalTranslator Local => _local;
+
     public TranslationEngine Engine { get; set; } = TranslationEngine.Google;
     public string? DeepLKey { get => _deepl.ApiKey; set => _deepl.ApiKey = value; }
     public string TargetLanguage { get; set; } = "ja";

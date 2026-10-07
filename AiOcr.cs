@@ -39,7 +39,8 @@ public sealed class AiOcr : IDisposable
     public async Task<List<OcrLineData>> RecognizeAsync(byte[] bgra, int width, int height, CancellationToken ct, bool accurate = false)
     {
         await EnsureStartedAsync();
-        var request = new JsonObject { ["w"] = width, ["h"] = height };
+        // chars: 1 文字ずつの位置も返してもらう (検索の印を一致した文字の上に付けるため)
+        var request = new JsonObject { ["w"] = width, ["h"] = height, ["chars"] = true };
         if (accurate) request["accurate"] = true;
         var response = await _worker.RequestAsync(request, bgra, ct);
 
@@ -52,7 +53,20 @@ public sealed class AiOcr : IDisposable
             weighted += score * text.Length;
             chars += text.Length;
             var box = item["box"]!.AsArray().Select(p => (X: p![0]!.GetValue<double>(), Y: p[1]!.GetValue<double>())).ToList();
-            lines.Add(new OcrLineData([text], box.Min(p => p.X), box.Min(p => p.Y), box.Max(p => p.X), box.Max(p => p.Y)));
+            List<OcrSpan>? spans = null;
+            if (item["chars"] is JsonArray charBoxes)
+            {
+                spans = [];
+                foreach (var c in charBoxes)
+                {
+                    var a = c!.AsArray();
+                    spans.Add(new OcrSpan(a[0]!.GetValue<string>(), a[2]!.GetValue<double>(), a[3]!.GetValue<double>(),
+                        a[4]!.GetValue<double>(), a[5]!.GetValue<double>(), a[1]!.GetValue<double>()));
+                }
+            }
+            // (文字の位置が行の文字とそろわなければ使わない: OcrSpans.IfMatching)
+            lines.Add(new OcrLineData([text], box.Min(p => p.X), box.Min(p => p.Y), box.Max(p => p.X), box.Max(p => p.Y),
+                OcrSpans.IfMatching(spans, text), score));
         }
         LastConfidence = chars > 0 ? weighted / chars : 1;
         return MergeRows(lines);
@@ -78,7 +92,11 @@ public sealed class AiOcr : IDisposable
             string left = string.Concat(a.Words), right = string.Concat(b.Words);
             // 間が大きく空いていれば空白で区切る
             string text = b.Left - a.Right > height * 1.5 ? left + " " + right : TextScript.Join(left, right);
-            rows[i] = new OcrLineData([text], a.Left, Math.Min(a.Top, b.Top), b.Right, Math.Max(a.Bottom, b.Bottom));
+            // 文字の位置はつなげる (左の断片 → 右の断片。間の空白は数えないので、そのままそろう)
+            var spans = a.Spans != null && b.Spans != null ? a.Spans.Concat(b.Spans).ToArray() : null;
+            double? confidence = a.Confidence is { } ca && b.Confidence is { } cb ? Math.Min(ca, cb) : null;
+            rows[i] = new OcrLineData([text], a.Left, Math.Min(a.Top, b.Top), b.Right, Math.Max(a.Bottom, b.Bottom),
+                OcrSpans.IfMatching(spans, text), confidence);
         }
         return rows;
     }

@@ -18,6 +18,8 @@ import CoreAudio
 import CoreGraphics
 import CoreMedia
 import Foundation
+import ImageIO
+import PDFKit
 import ScreenCaptureKit
 import Security
 import Vision
@@ -537,6 +539,40 @@ func changed(_ a: [UInt8], _ b: [UInt8]) -> Bool {
     return false
 }
 
+/// 行の中の単語 (空白で区切った語。日本語・中国語の字は 1 文字ずつ) の位置 [[文字, x0, y0, x1, y1], ...]。
+/// Vision の boundingBox(for:) が返した位置だけを使い、返せない語は含めない (C# 側は数が合わなければ行全体で扱う)。
+func wordBoxes(_ candidate: VNRecognizedText, width w: Double, height h: Double) -> [[Any]] {
+    let text = candidate.string
+    var out: [[Any]] = []
+    func isCJK(_ c: Character) -> Bool {
+        c.unicodeScalars.contains { s in
+            (0x3040...0x30FF).contains(s.value) || (0x3400...0x9FFF).contains(s.value) || (0xF900...0xFAFF).contains(s.value) || (0xFF00...0xFFEF).contains(s.value)
+        }
+    }
+    var tokens: [Range<String.Index>] = []
+    var start: String.Index? = nil
+    var i = text.startIndex
+    while i < text.endIndex {
+        let c = text[i]
+        let next = text.index(after: i)
+        if c.isWhitespace {
+            if let s = start { tokens.append(s..<i); start = nil }
+        } else if isCJK(c) {
+            if let s = start { tokens.append(s..<i); start = nil }
+            tokens.append(i..<next)
+        } else if start == nil {
+            start = i
+        }
+        i = next
+    }
+    if let s = start { tokens.append(s..<text.endIndex) }
+    for range in tokens {
+        guard let box = try? candidate.boundingBox(for: range)?.boundingBox else { return [] }
+        out.append([String(text[range]), box.minX * w, (1 - box.maxY) * h, box.maxX * w, (1 - box.minY) * h])
+    }
+    return out
+}
+
 /// 画像の文字を読む (Vision)。座標は画像のピクセル (左上が原点)。
 func recognize(_ image: CGImage, languages: [String]) throws -> [[String: Any]] {
     let request = VNRecognizeTextRequest()
@@ -558,6 +594,7 @@ func recognize(_ image: CGImage, languages: [String]) throws -> [[String: Any]] 
             "right": b.maxX * w,
             "bottom": (1 - b.minY) * h,
             "confidence": candidate.confidence,
+            "words": wordBoxes(candidate, width: w, height: h),
         ])
     }
     return lines.sorted { ($0["top"] as! Double, $0["left"] as! Double) < ($1["top"] as! Double, $1["left"] as! Double) }
@@ -573,6 +610,58 @@ func bgra(_ image: CGImage) -> Data {
         context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
     }
     return data
+}
+
+/// 白い背景に描いた BGRA (透明な部分のある画像・PDF のページを読み取りやすくする)。w×h に合わせて描く。
+func bgraOnWhite(_ image: CGImage, width: Int, height: Int) -> Data {
+    var data = Data(count: width * height * 4)
+    data.withUnsafeMutableBytes { buffer in
+        guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) else { return }
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+    }
+    return data
+}
+
+/// 画像のファイルを読む (写真の向き (EXIF) に合わせ、長い辺が maxSize を超えれば縮める)。
+func loadImage(path: String, maxSize: Int) throws -> [String: Any] {
+    guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil) else { throw HelperError("画像を読めません") }
+    let options: [CFString: Any] = [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        kCGImageSourceThumbnailMaxPixelSize: maxSize,
+    ]
+    guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { throw HelperError("画像を読めません") }
+    return ["w": image.width, "h": image.height, "data": bgraOnWhite(image, width: image.width, height: image.height).base64EncodedString()]
+}
+
+func openPdf(_ path: String) throws -> PDFDocument {
+    guard let document = PDFDocument(url: URL(fileURLWithPath: path)) else { throw HelperError("PDF を開けません") }
+    if document.isLocked { throw HelperError("パスワードのかかった PDF は読めません") }
+    return document
+}
+
+/// PDF の 1 ページを画像にする (回転を含めた向き。白い背景。長い辺が maxSize を超えれば縮める)。
+func renderPdfPage(path: String, index: Int, dpi: Double, maxSize: Int) throws -> [String: Any] {
+    let document = try openPdf(path)
+    guard index >= 0, index < document.pageCount, let page = document.page(at: index) else { throw HelperError("ページがありません") }
+    let box = page.bounds(for: .mediaBox)
+    let rotation = ((page.rotation % 360) + 360) % 360
+    var points = CGSize(width: box.width, height: box.height)
+    if rotation == 90 || rotation == 270 { points = CGSize(width: box.height, height: box.width) }
+    var scale = min(max(dpi, 36), 600) / 72
+    let longest = max(points.width, points.height) * scale
+    if longest > CGFloat(maxSize) { scale *= CGFloat(maxSize) / longest }
+    let width = max(1, Int((points.width * scale).rounded())), height = max(1, Int((points.height * scale).rounded()))
+    // 縮小した見本の画像 (回転を含む) を、決めた大きさで描く
+    let thumbnail = page.thumbnail(of: NSSize(width: width, height: height), for: .mediaBox)
+    var rect = CGRect(x: 0, y: 0, width: width, height: height)
+    guard let image = thumbnail.cgImage(forProposedRect: &rect, context: nil, hints: nil) else { throw HelperError("ページを画像にできません") }
+    return ["w": width, "h": height, "data": bgraOnWhite(image, width: width, height: height).base64EncodedString()]
 }
 
 // MARK: - ショートカット (Carbon)
@@ -962,6 +1051,36 @@ func recordPreview(window: Int, display: Int, maxWidth: Int) async throws -> [St
     return ["jpeg": jpeg.base64EncodedString(), "w": image.width, "h": image.height]
 }
 
+/// 窓または画面を 1 枚取り込む (拡張機能の画面の取り込み)。BGRA (上から)。長い辺が maxSize を超えれば縮める。
+/// 取り込みを禁止された窓・保護された動画は OS が黒くするので、そのまま返す (回避しない)。
+func captureTarget(window: Int, display: Int, maxSize: Int) async throws -> [String: Any] {
+    let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+    let filter: SCContentFilter
+    var size: CGSize
+    var scale: CGFloat = 1
+    if window != 0 {
+        guard let w = content.windows.first(where: { Int($0.windowID) == window }) else { throw HelperError("ウィンドウが見つかりません") }
+        filter = SCContentFilter(desktopIndependentWindow: w)
+        size = w.frame.size
+        scale = CGFloat(NSScreen.screens.first(where: { $0.frame.intersects(w.frame) })?.backingScaleFactor ?? 2)
+    } else {
+        guard let d = content.displays.first(where: { Int($0.displayID) == display }) ?? content.displays.first else { throw HelperError("ディスプレイが見つかりません") }
+        let me = content.applications.filter { $0.processID == getpid() || $0.processID == hostPid }
+        filter = SCContentFilter(display: d, excludingApplications: me, exceptingWindows: [])
+        size = CGSize(width: d.width, height: d.height)
+        scale = CGFloat(NSScreen.screens.first(where: { ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.intValue == display })?.backingScaleFactor ?? 2)
+    }
+    var w = size.width * scale, h = size.height * scale
+    let longest = max(w, h)
+    if longest > CGFloat(maxSize) { w = w * CGFloat(maxSize) / longest; h = h * CGFloat(maxSize) / longest }
+    let config = SCStreamConfiguration()
+    config.width = max(16, Int(w))
+    config.height = max(16, Int(h))
+    config.showsCursor = false
+    let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+    return ["w": image.width, "h": image.height, "data": bgra(image).base64EncodedString()]
+}
+
 /// 録画に選べるもの: ウィンドウ (1 つずつ) と画面 (ディスプレイ)。
 func recordTargets() async throws -> [String: Any] {
     let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
@@ -1108,6 +1227,17 @@ func handle(_ request: [String: Any]) {
             }
         }
 
+    case "capture_target":
+        Task {
+            do {
+                reply(id, try await captureTarget(window: request["window"] as? Int ?? 0, display: request["display"] as? Int ?? 0,
+                                                  maxSize: request["max"] as? Int ?? 2560))
+            } catch {
+                fail(id, message(of: error)
+                     + (CGPreflightScreenCaptureAccess() ? "" : " (システム設定 → プライバシーとセキュリティ → 画面収録とシステムオーディオ録音 で GetText を許可してください)"))
+            }
+        }
+
     case "record_preview":
         Task {
             do {
@@ -1182,6 +1312,34 @@ func handle(_ request: [String: Any]) {
     case "audio_stop":
         stopAudio(request["stream"] as? String ?? "win")
         reply(id)
+
+    case "image_load":
+        do { reply(id, try loadImage(path: request["path"] as? String ?? "", maxSize: request["max"] as? Int ?? 6000)) } catch { fail(id, message(of: error)) }
+
+    case "pdf_info":
+        do { reply(id, ["pages": try openPdf(request["path"] as? String ?? "").pageCount]) } catch { fail(id, message(of: error)) }
+
+    case "pdf_render":
+        do {
+            reply(id, try renderPdfPage(path: request["path"] as? String ?? "", index: request["page"] as? Int ?? 0,
+                                        dpi: request["dpi"] as? Double ?? 200, maxSize: request["max"] as? Int ?? 6000))
+        } catch {
+            fail(id, message(of: error))
+        }
+
+    case "window_at":
+        // x, y: 画面の座標 (ポイント・左上が原点)。そこにある、いちばん手前の窓のアプリと題名 (GetText の窓は飛ばす)
+        let point = CGPoint(x: request["x"] as? Double ?? 0, y: request["y"] as? Double ?? 0)
+        let infos = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        for info in infos {
+            let pid = pid_t(info[kCGWindowOwnerPID as String] as? Int ?? 0)
+            guard (info[kCGWindowLayer as String] as? Int ?? 0) == 0, pid != getpid(), pid != hostPid,
+                  let bounds = info[kCGWindowBounds as String] as? [String: Any],
+                  let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary), rect.contains(point) else { continue }
+            reply(id, ["app": info[kCGWindowOwnerName as String] as? String ?? "", "title": info[kCGWindowName as String] as? String ?? ""])
+            return
+        }
+        reply(id, [:])
 
     case "window_bounds":
         if let b = windowBounds(request["window"] as? Int ?? 0) {

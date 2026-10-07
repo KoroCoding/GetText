@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    GetText の拡張機能 (プラグイン) の契約。GetText (Windows 版 WPF・Mac 版 Avalonia) と拡張機能の両方が参照する。
+    画面の部品 (WPF・Avalonia) には依存しない。拡張機能は画面を描かず、コマンド・機能・設定などの情報を渡し、GetText が描く。
+    Plugin API v1。互換性を壊す変更をするときは ApiVersion を上げる。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>GetText.Plugins</RootNamespace>
+    <AssemblyName>GetText.Plugin.Abstractions</AssemblyName>
+    <Version>1.0.0</Version>
+    <Product>GetText</Product>
+    <Description>GetText Plugin API v1</Description>
+    <Copyright>Copyright (C) 2026 KoroCoding. GPL-3.0-or-later.</Copyright>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+</Project>

@@ -117,6 +117,23 @@ public static class ScreenUtil
         return list;
     }
 
+    /// <summary>すべてのモニターの全体 (物理ピクセル) と、主モニターか。主モニターを先に。</summary>
+    public static List<(Rect Bounds, bool Primary)> AllMonitors()
+    {
+        var list = new List<(Rect, bool)>();
+        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr monitor, IntPtr dc, ref RECT bounds, IntPtr data) =>
+        {
+            var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+            if (GetMonitorInfo(monitor, ref info))
+            {
+                var m = info.rcMonitor;
+                list.Add((new Rect(m.Left, m.Top, m.Right - m.Left, m.Bottom - m.Top), (info.dwFlags & 1 /* MONITORINFOF_PRIMARY */) != 0));
+            }
+            return true;
+        }, IntPtr.Zero);
+        return list.OrderByDescending(m => m.Item2).ToList();
+    }
+
     /// <summary>
     /// 窓の左上を物理ピクセルの位置に動かす (大きさは変えない)。拡大率の違うモニターへ移ると Windows が窓の大きさを
     /// 変え、そのとき位置も少しずれることがあるので、ずれていればもう一度合わせる。

@@ -3,7 +3,7 @@
 # 使い方: bash build_app.sh <出力フォルダ> [arm64|x64]   (省略すると、この Mac の種類)
 # 出力: <出力フォルダ>/GetText.app と GetText-mac-<arm64|x64>.zip
 #   GetText.app/Contents/MacOS      GetText (アプリ本体) と GetTextHelper (Mac の機能を受け持つ補助プログラム)
-#   GetText.app/Contents/Resources  offline/ (Python のスクリプト)・setup_mac.sh・GetText.icns
+#   GetText.app/Contents/Resources  offline/ (Python のスクリプト)・bundled-plugins/ (同梱の拡張機能)・setup_mac.sh・GetText.icns
 # 署名は「その場の署名」(ad-hoc)。初めて開くときは右クリック → 開く (README の「Mac 版」を参照)。
 set -euo pipefail
 
@@ -23,7 +23,7 @@ echo "== 補助プログラム (Swift) をビルドしています"
 target=$([ "$arch" = "arm64" ] && echo arm64-apple-macos14.0 || echo x86_64-apple-macos14.0)
 swiftc -O -swift-version 5 -target "$target" "$mac/helper/GetTextHelper.swift" -o "$app/Contents/MacOS/GetTextHelper" \
     -framework AppKit -framework AVFoundation -framework Carbon -framework CoreAudio -framework CoreGraphics \
-    -framework CoreMedia -framework ScreenCaptureKit -framework Security -framework Vision
+    -framework CoreMedia -framework ImageIO -framework PDFKit -framework ScreenCaptureKit -framework Security -framework Vision
 
 echo "== アプリ (C# / Avalonia) をビルドしています ($arch)"
 dotnet publish "$mac/GetText.Mac.csproj" -c Release -r "osx-$arch" --self-contained true \
@@ -34,6 +34,13 @@ rm -rf "$app/Contents/MacOS/offline" "$app/Contents/MacOS/setup_mac.sh"
 mkdir -p "$app/Contents/Resources/offline"
 cp "$root"/offline/*.py "$app/Contents/Resources/offline/"
 cp "$here/setup_mac.sh" "$app/Contents/Resources/"
+# 同梱の拡張機能 (設定 → 拡張機能 の「見つける」に出る。入れるまでは読み込まない。見本は入れない)
+if command -v pwsh >/dev/null 2>&1; then
+    echo "== 同梱の拡張機能を作っています"
+    pwsh -NoProfile -File "$root/tools/make_plugins.ps1" -Out "$app/Contents/Resources/bundled-plugins" -Skip gettext.sample
+else
+    echo "   (PowerShell (pwsh) が無いので、拡張機能は同梱しません)"
+fi
 chmod +x "$app/Contents/Resources/setup_mac.sh" "$app/Contents/MacOS/GetText" "$app/Contents/MacOS/GetTextHelper"
 sed "s/__VERSION__/$version/g" "$here/Info.plist" > "$app/Contents/Info.plist"
 

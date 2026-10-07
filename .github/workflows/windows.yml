@@ -6,7 +6,7 @@ name: Windows
 
 on:
   push:
-    branches: [main]
+    branches: [main, plugin-platform-rc]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -34,7 +34,10 @@ jobs:
           dotnet-version: '9.0.x'
 
       - name: 単体テスト
-        run: dotnet test tests/GetText.Tests --nologo -v q
+        shell: pwsh
+        run: |
+          dotnet test tests/GetText.Tests --nologo -v q | Tee-Object -FilePath unit-tests.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # 画面の画像 (ライト / ダーク・拡大率・状態ごと) と画面の操作の確認。結果は成果物 GetText-windows-screens に置く
       - name: 画面の画像と操作の確認
@@ -70,6 +73,23 @@ jobs:
           ./tools/make_release.ps1 -Out GetText-windows-x64.zip
           # 署名に渡すため、ZIP の中身 (GetText フォルダ) を取り出しておく
           Expand-Archive GetText-windows-x64.zip -DestinationPath package
+
+      # 結果の要約を注釈 (ログインせずに読める) と Summary に出す。判定は変えない
+      - name: 結果の要約
+        if: always()
+        shell: pwsh
+        run: |
+          $lines = @()
+          $t = Get-Content unit-tests.txt -ErrorAction SilentlyContinue | Select-String -Pattern '(Passed|Failed)!.*Total:.*' | Select-Object -Last 1
+          $lines += "unit: $(if ($t) { $t.Line.Trim() } else { 'no result' })"
+          $p = @(Get-ChildItem package/GetText/bundled-plugins -Filter *.gtplugin -ErrorAction SilentlyContinue)
+          $lines += "plugins: $($p.Count) ($(($p | ForEach-Object Name) -join ', '))"
+          $lines += "screens: ${{ steps.screens.outcome }}"
+          $ui = Get-Content screens/ui.txt -ErrorAction SilentlyContinue | Select-Object -Last 3
+          $lines += "ui: $(($ui | ForEach-Object { $_.Trim() }) -join ' / ')"
+          $shots = @(Get-ChildItem screens -Recurse -Filter *.png -ErrorAction SilentlyContinue).Count
+          $lines += "screenshots: $shots"
+          foreach ($l in $lines) { Write-Output "::notice title=GetText CI::$l"; Add-Content $env:GITHUB_STEP_SUMMARY "- $l" }
 
       - name: 署名する前のファイルを残す
         id: unsigned

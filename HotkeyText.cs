@@ -12,6 +12,7 @@ public static class HotkeyText
         ("copy-translation", "日本語訳をコピー", "Ctrl+Alt+T"),
         ("refresh", "今すぐ読み取る", "Ctrl+Alt+R"),
         ("pause", "一時停止 / 再開", "Ctrl+Alt+P"),
+        ("quick-ocr", "範囲を選んで文字をコピー (Quick OCR)", "Ctrl+Alt+Q"),
     ];
 
     /// <summary>設定のキー (無い・読めなければ既定)。</summary>

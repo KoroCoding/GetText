@@ -26,7 +26,7 @@ internal static class DocSnapshots
             OcrEngine = OcrEngineKind.Ai, // 見本では AI は起動しない (App.DemoMode)
             Translate = true,
             Follow = false,
-            Topmost = false,
+            TextTopmost = false,
             CaptureWidth = 560,
             CaptureHeight = 300,
             TextWidth = 560,
@@ -91,6 +91,7 @@ internal static class DocSnapshots
 
         // 設定 (ページごと・検索)
         var settingsWindow = new SettingsWindow(text, settings);
+        settingsWindow.ShowDemoModels(ModelCatalog.Demo());
         foreach (var page in Enum.GetValues<SettingsPage>())
         {
             settingsWindow.SelectPage(page);
@@ -104,6 +105,22 @@ internal static class DocSnapshots
         settingsWindow.ShowDemoSearch("zzz");
         await RenderAsync(settingsWindow, Path.Combine(outDir, "settings_search_empty.png"), keepOpen: true);
         settingsWindow.ShowDemoSearch("");
+
+        // 設定 → 拡張機能 (空・入れたもの・見つける・更新・一覧を取れない・入れている途中)
+        var pluginDemo = Path.Combine(Path.GetTempPath(), "gettext-plugin-demo-" + Environment.ProcessId);
+        foreach (var (name, scenario, tab, error, progress) in new (string, string, string, string?, string?)[]
+        {
+            ("empty", "empty", "Installed", null, null),
+            ("installed", "installed", "Installed", null, null),
+            ("discover", "discover", "Discover", null, null),
+            ("updates", "updates", "Updates", null, null),
+            ("offline", "discover", "Discover", "オンラインの一覧を取れませんでした (時間切れ)。前に保存した一覧を出しています。", null),
+            ("progress", "discover", "Discover", null, "「読み取りの履歴」を入れています"),
+        })
+        {
+            settingsWindow.ShowDemoExtensions(PluginDemo.Create(pluginDemo, scenario), tab, error, progress);
+            await RenderAsync(settingsWindow, Path.Combine(outDir, $"settings_extensions_{name}.png"), keepOpen: true);
+        }
         settingsWindow.Width = settingsWindow.MinWidth;
         settingsWindow.Height = settingsWindow.MinHeight;
         settingsWindow.SelectPage(SettingsPage.ScreenOcr);

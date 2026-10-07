@@ -282,6 +282,30 @@ internal static class UiSelfTest
         await Idle(sw);
         Check(sw.CurrentPage == SettingsPage.Privacy && ((ItemsControl)sw.FindName("PrivacyList")).Items.Count >= 5,
             $"プライバシーのページに、送る・送らないの一覧が出る ({((ItemsControl)sw.FindName("PrivacyList")).Items.Count} 件)");
+        // 拡張機能: 入れたもの (動いている・止めている・問題がある) と、見つける の検索
+        var pluginDemo = Path.Combine(Path.GetTempPath(), "gettext-plugin-uitest-" + Environment.ProcessId);
+        try
+        {
+            sw.ShowDemoExtensions(PluginDemo.Create(pluginDemo, "installed"), "Installed");
+            await Idle(sw);
+            var extRows = ((ItemsControl)sw.FindName("ExtList")).Items.OfType<ExtensionRow>().ToList();
+            Check(sw.CurrentPage == SettingsPage.Extensions && extRows.Count == 3
+                  && extRows.Select(r => r.Item.State).OrderBy(s => s).SequenceEqual(new[] { PluginItemState.Running, PluginItemState.Disabled, PluginItemState.Error }.OrderBy(s => s)),
+                $"拡張機能のページに、入れたものと状態が出る ({string.Join(", ", extRows.Select(r => r.Name + "/" + r.StateLabel))})");
+            Check(extRows.Any(r => r.SettingsVisibility == Visibility.Visible && r.SettingsPanel != null),
+                "動いている拡張機能の設定を、GetText の部品で出す");
+            sw.ShowDemoExtensions(PluginDemo.Create(pluginDemo, "discover"), "Discover");
+            ((TextBox)sw.FindName("ExtSearch")).Text = "インターネット";
+            await Idle(sw);
+            var found = ((ItemsControl)sw.FindName("ExtList")).Items.OfType<ExtensionRow>().ToList();
+            Check(found.Count == 1 && found[0].Item.Trust == PluginTrust.Community && !found[0].Item.Local,
+                $"拡張機能を要求されるアクセスで探せる (「インターネット」→ {string.Join(", ", found.Select(r => r.Name))})");
+            ((TextBox)sw.FindName("ExtSearch")).Text = "";
+        }
+        finally
+        {
+            try { Directory.Delete(pluginDemo, recursive: true); } catch (IOException) { }
+        }
         sw.Close();
 
         // 確かめた画面を画像に残す (記録中: 確定前の文字の欄と最新の発言が重ならないか)

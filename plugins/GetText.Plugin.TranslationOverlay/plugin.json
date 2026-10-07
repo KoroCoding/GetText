@@ -1,0 +1,20 @@
+{
+  "id": "gettext.translation-overlay",
+  "name": { "ja": "訳を重ねる", "en": "Translation Overlay" },
+  "version": "1.0.0",
+  "publisher": "KoroCoding",
+  "description": { "ja": "読み取りの枠の中の外国語に、日本語の訳を重ねて出します。訳はこの PC の中で行います。", "en": "Overlays Japanese translations on foreign text inside the reading frame. Translation runs on this PC." },
+  "apiVersion": 1,
+  "minHostVersion": "1.1.0",
+  "platforms": ["any"],
+  "capabilities": ["translation-overlay"],
+  "permissions": ["screen-text", "notifications", "storage"],
+  "dependencies": [],
+  "optionalDependencies": [],
+  "entryPoint": { "assembly": "bin/GetText.Plugin.TranslationOverlay.dll", "type": "GetText.Plugins.TranslationOverlay.TranslationOverlayPlugin" },
+  "requiresRestart": true,
+  "models": ["fugumt-en-ja"],
+  "license": "GPL-3.0-or-later",
+  "homepage": "https://github.com/KoroCoding/GetText/tree/main/plugins/GetText.Plugin.TranslationOverlay",
+  "icon": "Translate"
+}

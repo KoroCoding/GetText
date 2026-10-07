@@ -1,6 +1,6 @@
 ﻿# ビルド済みの配布版 (GetText_配布版.zip) を作る。相手の PC では .NET SDK もビルドも要らない (アプリに .NET を入れる)。
 # 使い方: powershell -ExecutionPolicy Bypass -File make_release.ps1 -Out <出力.zip>
-# ZIP の中身: GetText\ (GetText.exe・offline\・setup.bat・setup.ps1・update.bat・update.ps1・README.md・紹介と使い方の動画)
+# ZIP の中身: GetText\ (GetText.exe・offline\・bundled-plugins\・setup.bat・setup.ps1・update.bat・update.ps1・README.md・紹介と使い方の動画)
 #   更新するときは、新しい ZIP を展開して update.bat を実行すると、使っている GetText のファイルを置き換える。
 #   相手の PC では ZIP を展開して setup.bat を実行すると、Python と AI のモデルを用意してショートカットを作る。
 # ※ 署名のないアプリなので、Smart App Control が有効な PC では起動を止められることがある (README 参照)。
@@ -20,6 +20,9 @@ try {
     Pop-Location
     if ($code -ne 0 -or -not (Test-Path (Join-Path $pkg 'GetText.exe'))) { throw 'ビルドに失敗しました' }
     foreach ($f in 'setup.bat', 'setup.ps1', 'update.bat', 'update.ps1', 'uninstall.bat', 'uninstall.ps1', 'README.md', 'LICENSE') { Copy-Item (Join-Path $root $f) $pkg }
+    # 同梱の拡張機能 (設定 → 拡張機能 の「見つける」に出る。入れるまでは読み込まない。見本は入れない)
+    Write-Host '■ 同梱の拡張機能を作っています'
+    & (Join-Path $PSScriptRoot 'make_plugins.ps1') -Out (Join-Path $pkg 'bundled-plugins') -Skip 'gettext.sample'
     $video = Join-Path $root 'docs\GetText_紹介と使い方.mp4'
     if (-not (Test-Path -LiteralPath $video)) { throw "紹介と使い方の動画がありません: $video (tools\make_video.py で作ってください)" }
     if (Test-Path -LiteralPath $video) {

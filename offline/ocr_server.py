@@ -5,6 +5,8 @@ GetText から子プロセスとして起動され、標準入出力で通信す
   要求:     {"id": 1, "w": 640, "h": 480, "len": 1228800}\n + BGRA の生データ (len バイト)
             "accurate": true を付けると、高精度の認識モデル (PP-OCRv6 rec medium) で読む (遅い。画面が止まったときの読み直し用)
   応答:     {"id": 1, "lines": [{"text": "...", "score": 0.98, "box": [[x, y] x4]}], "ms": 85}
+            "chars": true を付けると、各行に 1 文字ずつの位置も付ける (RapidOCR の return_single_char_box。
+            認識の各列の位置から求めた枠): "chars": [["文字", 確からしさ, x0, y0, x1, y1], ...] (空白は含まない)
 標準入力が閉じられたら (GetText が終了したら) 自動で終了する。
 """
 import json
@@ -64,6 +66,21 @@ def use_japanese_characters():
 
 
 use_japanese_characters()
+
+
+def char_boxes(word_line):
+    """RapidOCR の 1 行分の文字の枠 [(文字, 確からしさ, [[x, y] x4]), ...] を [文字, 確からしさ, x0, y0, x1, y1] の並びにする。"""
+    out = []
+    for item in word_line or []:
+        try:
+            text, conf, pts = item[0], item[1], np.asarray(item[2], dtype=float)
+            if not text or not str(text).strip():
+                continue
+            out.append([str(text), round(float(conf), 3), float(pts[:, 0].min()), float(pts[:, 1].min()),
+                        float(pts[:, 0].max()), float(pts[:, 1].max())])
+        except Exception:
+            return None  # 形が想定と違う: 位置は付けない (行全体で扱う)
+    return out
 
 
 def read_exact(stream, n):
@@ -136,12 +153,17 @@ def main():
                 if accurate["engine"] is None:
                     accurate["engine"], _ = create_engine(medium=True)  # 初めて使うときに読み込む
                 use = accurate["engine"]
-            result = use(img)
+            chars = bool(req.get("chars"))
+            result = use(img, return_word_box=True, return_single_char_box=True) if chars else use(img)
             ms = int((time.perf_counter() - t0) * 1000)
             lines = []
             if result.txts:
-                for box, text, score in zip(result.boxes, result.txts, result.scores):
-                    lines.append({"text": text, "score": round(float(score), 3), "box": np.asarray(box).tolist()})
+                words = result.word_results if chars and result.word_results and len(result.word_results) == len(result.txts) else None
+                for i, (box, text, score) in enumerate(zip(result.boxes, result.txts, result.scores)):
+                    line = {"text": text, "score": round(float(score), 3), "box": np.asarray(box).tolist()}
+                    if words is not None:
+                        line["chars"] = char_boxes(words[i])
+                    lines.append(line)
             resp = {"id": req.get("id"), "lines": lines, "ms": ms}
         except EOFError:
             break

@@ -103,6 +103,16 @@ public partial class TextWindow : Window
     public AiOcr AiOcr => _aiOcr;
     public Translator Translator => _translator;
 
+    /// <summary>利用者が選んだ読み取りの方式 (拡張機能・Quick OCR が方式を指定しないときに使う)。</summary>
+    public string PreferredOcrProvider => UseAiOcr ? "ai" : "windows";
+
+    /// <summary>設定 (開発者向けの API の入・切など、窓の外から読む)。</summary>
+    public AppSettings Settings => _settings;
+
+    /// <summary>開発者向けの API: 表示している原文と訳 (UI のスレッドで読む)。</summary>
+    public (bool Open, string Text, string? Translation) ReadingTextForApi() =>
+        Dispatcher.Invoke(() => (IsOcrOpen, ResultBox.Text ?? "", _settings.Translate ? TranslationBox.Text : null));
+
     public TextWindow(CaptureWindow capture, AppSettings settings)
     {
         InitializeComponent();
@@ -206,8 +216,8 @@ public partial class TextWindow : Window
     private void ApplyAllSettings()
     {
         _timer.Interval = TimeSpan.FromMilliseconds(_settings.IntervalMs);
-        Topmost = _settings.Topmost;
-        PinToggle.IsChecked = _settings.Topmost;
+        Topmost = _settings.TextTopmost;
+        PinToggle.IsChecked = _settings.TextTopmost;
         ApplyWrap();
         SetFontSize(_settings.FontSize);
         _translator.Engine = _settings.TranslationEngine;
@@ -295,9 +305,15 @@ public partial class TextWindow : Window
             case nameof(AppSettings.IntervalMs):
                 _timer.Interval = TimeSpan.FromMilliseconds(_settings.IntervalMs);
                 break;
-            case nameof(AppSettings.Topmost):
-                Topmost = _settings.Topmost;
-                PinToggle.IsChecked = _settings.Topmost;
+            case nameof(AppSettings.MinutesTopmost):
+                if (_minutesWindow != null) _minutesWindow.Topmost = _settings.MinutesTopmost;
+                break;
+            case nameof(AppSettings.RecorderTopmost):
+                if (App.Home?.Recorder is { } recorder) recorder.Topmost = _settings.RecorderTopmost;
+                break;
+            case nameof(AppSettings.TextTopmost):
+                Topmost = _settings.TextTopmost;
+                PinToggle.IsChecked = _settings.TextTopmost;
                 break;
             case nameof(AppSettings.OcrView):
                 if (_settings.OcrView == OcrView.Groups && _lastSegments.Count == 0) _lastPixels = null; // 枠線を探すため、すぐに読み直す
@@ -767,6 +783,7 @@ public partial class TextWindow : Window
         // 文脈補正は Windows OCR の癖に合わせたものなので AI OCR には使わない
         bool correct = !_lastFromAi && _settings.HighAccuracy;
         var frame = OcrDocument.From(_lastLines, _settings.JoinCjk, correct);
+        if (fromNewFrame && !App.DemoMode && PluginRuntime.HasOcrSubscribers) PublishToPlugins(frame);
         _grouping = OcrGrouping.None;
         if (Accumulating)
         {
@@ -794,15 +811,29 @@ public partial class TextWindow : Window
         PumpTranslation();
     }
 
+    /// <summary>読み取った 1 回分を、受け取る拡張機能に渡す (別のスレッドで。読み取りは待たない)。</summary>
+    private void PublishToPlugins(OcrDocument frame)
+    {
+        var r = _capture.GetCaptureRectPixels();
+        if (r.IsEmpty) return;
+        var source = WindowList.WindowAt(r.X + r.Width / 2, r.Y + r.Height / 2); // (読み取りの範囲の下のアプリ)
+        PluginRuntime.PublishOcrFrame(PluginFrames.From(frame, (r.X, r.Y, r.Width, r.Height),
+            image: _lastPixels is { } pixels ? (pixels, r.Width, r.Height) : null, source: source));
+    }
+
     private void RenderOcr()
     {
         if (_doc == null) return;
         if (_doc.IsEmpty)
         {
             // 空の状態: 読み取ったが文字が無い
-            OcrEmptyTitle.Text = Accumulating ? "まだ集めた文字はありません" : "枠の中に文字が見つかりません";
+            // 黒く写っている (保護された画面など) ときは、そう知らせる (回避はしない)
+            bool uniform = !Accumulating && _lastPixels is { } shot && _lastCaptureHeight > 0
+                           && ProtectedContent.LooksProtected(shot, shot.Length / 4 / _lastCaptureHeight, _lastCaptureHeight);
+            OcrEmptyTitle.Text = Accumulating ? "まだ集めた文字はありません" : uniform ? ProtectedContent.Title : "枠の中に文字が見つかりません";
             OcrEmptyDetail.Text = Accumulating
                 ? "文書をスクロールすると、読んだ内容がここに追記されます。"
+                : uniform ? ProtectedContent.Detail
                 : "読みたい文字の上に枠を重ねるか、枠を広げてください。小さな文字は枠を大きくすると読みやすくなります。";
         }
         bool applied = _ocrPane.Set(TextConverter.Apply(_doc.ToDisplayText(), _settings.Convert));
@@ -999,8 +1030,8 @@ public partial class TextWindow : Window
 
     public void TogglePin()
     {
-        _settings.Topmost = !_settings.Topmost;
-        OnSettingChanged(nameof(AppSettings.Topmost));
+        _settings.TextTopmost = !_settings.TextTopmost;
+        OnSettingChanged(nameof(AppSettings.TextTopmost));
     }
 
     /// <summary>並べ方を変える (上から順 / 枠・まとまりごと)。</summary>
@@ -1126,9 +1157,16 @@ public partial class TextWindow : Window
         ApplyOcrVisibility();
     }
 
+    /// <summary>読み取りの画面 (枠) を隠した・閉じた (画面に重ねた訳などを消す)。</summary>
+    public event Action? OcrHidden;
+
+    /// <summary>読み取りの画面 (枠) が出ているか (隠れている間は、画面に文字を重ねない)。</summary>
+    public bool IsOcrVisible => !_ocrClosed && !_hiddenForMinutes;
+
     private void ApplyOcrVisibility()
     {
         bool hidden = _ocrClosed || _hiddenForMinutes;
+        if (hidden) OcrHidden?.Invoke();
         if (_ocrHidden != hidden && !_shutDown)
         {
             _ocrHidden = hidden;
@@ -1560,6 +1598,7 @@ public partial class TextWindow : Window
             ["copy-translation"] = () => { CopyText(TranslationBox, "日本語訳"); _capture.Flash(StatusText.Text); },
             ["refresh"] = () => _ = RunOcrAsync(force: true),
             ["pause"] = () => SetPaused(!_paused),
+            ["quick-ocr"] = QuickOcr.Run,
         };
         foreach (var (id, _, _) in HotkeyText.Actions)
         {

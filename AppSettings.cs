@@ -70,6 +70,11 @@ public sealed class AppSettings
     /// <summary>どのアプリを使っていても効くキー (操作の名前 → 「Ctrl+Alt+C」など)。無いものは既定のキー。</summary>
     public Dictionary<string, string> Hotkeys { get; set; } = [];
 
+    /// <summary>開発者向けの API (127.0.0.1 だけ・トークン必須)。既定でオフ。</summary>
+    public bool DeveloperApi { get; set; }
+
+    public int DeveloperApiPort { get; set; } = 47390;
+
     /// <summary>AI の機能のセットアップの案内を閉じた (次からは出さない)。</summary>
     public bool SetupHintDismissed { get; set; }
 
@@ -111,7 +116,19 @@ public sealed class AppSettings
     /// <summary>機能を選ぶ画面で機能を開いたら、その画面を最小化する。</summary>
     public bool HomeMinimizeOnOpen { get; set; } = true;
     public bool Follow { get; set; } = true;
-    public bool Topmost { get; set; } = true;
+    /// <summary>読み取りの画面を常に手前に表示する (前の版の「Topmost」から引き継ぐ)。</summary>
+    public bool TextTopmost { get; set; } = true;
+
+    /// <summary>議事録の画面を常に手前に表示する。</summary>
+    public bool MinutesTopmost { get; set; }
+
+    /// <summary>画面の録画の画面を常に手前に表示する。</summary>
+    public bool RecorderTopmost { get; set; }
+
+    /// <summary>前の版の設定 (読み取りの画面の常に手前)。読んだら TextTopmost に移し、もう書かない。</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("Topmost")]
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public bool? LegacyTopmost { get; set; }
     public bool Wrap { get; set; } = true;
     public bool JoinCjk { get; set; } = true;
     public ConvertMode Convert { get; set; } = ConvertMode.None;
@@ -216,6 +233,12 @@ public sealed class AppSettings
         OcrView = Defined(OcrView, OcrView.Text);
         TranslationEngine = Defined(TranslationEngine, TranslationEngine.Local);
         Hotkeys ??= [];
+        if (LegacyTopmost is { } legacy)
+        {
+            TextTopmost = legacy; // (前の版の「Topmost」は読み取りの画面のもの)
+            LegacyTopmost = null;
+        }
+        if (DeveloperApiPort is < 1024 or > 65535) DeveloperApiPort = 47390;
         MinutesLanguages ??= ["ja", "en"];
         MinutesTerms ??= [];
         MinutesSpeed ??= "auto";

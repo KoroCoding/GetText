@@ -1,0 +1,20 @@
+{
+  "id": "gettext.barcode",
+  "name": { "ja": "QR コード・バーコード", "en": "QR / Barcode" },
+  "version": "1.0.0",
+  "publisher": "KoroCoding",
+  "description": { "ja": "画面の範囲を選ぶと、QR コード・バーコードを読んでコピーします。URL は押したときだけ開きます。", "en": "Select an area of the screen to read QR codes and barcodes and copy them. URLs open only when you click." },
+  "apiVersion": 1,
+  "minHostVersion": "1.1.0",
+  "platforms": ["any"],
+  "capabilities": ["barcode"],
+  "permissions": ["screen-capture", "clipboard", "notifications"],
+  "dependencies": [],
+  "optionalDependencies": [],
+  "entryPoint": { "assembly": "bin/GetText.Plugin.Barcode.dll", "type": "GetText.Plugins.Barcode.BarcodePlugin" },
+  "requiresRestart": true,
+  "models": [],
+  "license": "GPL-3.0-or-later",
+  "homepage": "https://github.com/KoroCoding/GetText/tree/main/plugins/GetText.Plugin.Barcode",
+  "icon": "ScreenOcr"
+}

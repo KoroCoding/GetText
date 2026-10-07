@@ -126,12 +126,14 @@ public sealed class OcrPipeline
         foreach (var line in result.Lines)
         {
             if (line.Words.Count == 0) continue;
+            // 単語ごとの位置も残す (検索の印を一致した単語の上に付けるため。日本語は 1 文字ずつの単語になる)
+            var spans = line.Words.Select(w => new OcrSpan(w.Text,
+                (w.BoundingRect.X - pad) / sx, (w.BoundingRect.Y - pad) / sy,
+                (w.BoundingRect.X + w.BoundingRect.Width - pad) / sx, (w.BoundingRect.Y + w.BoundingRect.Height - pad) / sy)).ToArray();
             lines.Add(new OcrLineData(
                 line.Words.Select(w => w.Text).ToArray(),
-                (line.Words.Min(w => w.BoundingRect.X) - pad) / sx,
-                (line.Words.Min(w => w.BoundingRect.Y) - pad) / sy,
-                (line.Words.Max(w => w.BoundingRect.X + w.BoundingRect.Width) - pad) / sx,
-                (line.Words.Max(w => w.BoundingRect.Y + w.BoundingRect.Height) - pad) / sy));
+                spans.Min(s => s.Left), spans.Min(s => s.Top), spans.Max(s => s.Right), spans.Max(s => s.Bottom),
+                Spans: spans));
         }
         return lines;
     }

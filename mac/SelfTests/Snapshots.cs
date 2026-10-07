@@ -96,6 +96,7 @@ internal static class Snapshots
 
         // 設定 (ページごと・検索)
         var settingsWindow = new SettingsWindow(text, settings);
+        settingsWindow.ShowDemoModels(ModelCatalog.Demo());
         settingsWindow.Show();
         foreach (var page in Enum.GetValues<SettingsPage>())
         {
@@ -105,6 +106,22 @@ internal static class Snapshots
         settingsWindow.ShowDemoSearch("翻訳");
         await Save(settingsWindow, "settings_search");
         settingsWindow.ShowDemoSearch("");
+
+        // 設定 → 拡張機能 (空・入れたもの・見つける・更新・一覧を取れない・入れている途中)
+        var pluginDemo = Path.Combine(Path.GetTempPath(), "gettext-plugin-demo-" + Environment.ProcessId);
+        foreach (var (name, scenario, tab, error, progress) in new (string, string, string, string?, string?)[]
+        {
+            ("empty", "empty", "Installed", null, null),
+            ("installed", "installed", "Installed", null, null),
+            ("discover", "discover", "Discover", null, null),
+            ("updates", "updates", "Updates", null, null),
+            ("offline", "discover", "Discover", "オンラインの一覧を取れませんでした (時間切れ)。前に保存した一覧を出しています。", null),
+            ("progress", "discover", "Discover", null, "「読み取りの履歴」を入れています"),
+        })
+        {
+            settingsWindow.ShowDemoExtensions(PluginDemo.Create(pluginDemo, scenario), tab, error, progress);
+            await Save(settingsWindow, $"settings_extensions_{name}");
+        }
         settingsWindow.Width = settingsWindow.MinWidth;
         settingsWindow.Height = settingsWindow.MinHeight;
         settingsWindow.SelectPage(SettingsPage.ScreenOcr);

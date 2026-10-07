@@ -1,0 +1,20 @@
+{
+  "id": "gettext.document-ocr",
+  "name": { "ja": "文書の文字の読み取り", "en": "Document OCR" },
+  "version": "1.0.0",
+  "publisher": "KoroCoding",
+  "description": { "ja": "PDF や画像のファイルの文字を読み、テキスト・Markdown・JSON にします。いくつかのファイルやフォルダをまとめて読めます。", "en": "Reads text from PDF and image files (one or many) and saves it as text, Markdown or JSON." },
+  "apiVersion": 1,
+  "minHostVersion": "1.1.0",
+  "platforms": ["any"],
+  "capabilities": ["document-ocr"],
+  "permissions": ["files", "notifications"],
+  "dependencies": [],
+  "optionalDependencies": [],
+  "entryPoint": { "assembly": "bin/GetText.Plugin.DocumentOcr.dll", "type": "GetText.Plugins.DocumentOcr.DocumentOcrPlugin" },
+  "requiresRestart": true,
+  "models": [],
+  "license": "GPL-3.0-or-later",
+  "homepage": "https://github.com/KoroCoding/GetText/tree/main/plugins/GetText.Plugin.DocumentOcr",
+  "icon": "Document"
+}

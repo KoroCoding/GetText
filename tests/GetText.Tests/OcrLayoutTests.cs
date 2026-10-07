@@ -162,8 +162,8 @@ public class OcrLayoutTests
         Assert.Equal(2, matches.Count);
         var boxes = TextSearch.ToBoxes(doc, shown, matches);
         Assert.Equal(2, boxes.Count);
-        // 1 つめは 1 行目の 7〜11 文字目 (幅 110 を 11 文字で割った位置)
-        Assert.Equal(60, boxes[0].Left, 3);
+        // 文字の位置が無い行は、一致した文字の位置を推測せず行全体 (文字数で割った位置は、字の幅が違うとずれるため使わない)
+        Assert.Equal(0, boxes[0].Left, 3);
         Assert.Equal(110, boxes[0].Right, 3);
         Assert.Equal(0, boxes[0].Top);
         Assert.Equal(0, boxes[1].Left, 3);

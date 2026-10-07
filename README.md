@@ -42,6 +42,32 @@
 | **Mac 版**<br>同じ機能を、Mac の見た目と操作 (⌘ のキー・メニューバー) で使えます。 | ![Mac 版](docs/images/mac.png) |
 
 デザインの決まり (色・文字・アイコン・部品・拡張機能の登録): [docs/design/DESIGN.md](docs/design/DESIGN.md)
+
+## 拡張機能 — Start small. Install only what you need.
+
+GetText の本体は小さく保ち、必要な機能だけを **拡張機能** として足せます (設定 → 拡張機能)。拡張機能が無くても、文字の読み取り・翻訳・議事録・録画はそのまま使えます。
+
+- **入れたもの / 見つける / 更新**: 配布物に同梱の拡張機能と、「オンラインで探す」を押したときだけ読み込む GitHub の一覧から選べます。`.gtplugin` のファイルからも入れられます。入れる・更新・止める・消すは、GetText を再起動すると反映されます。
+- **見た目はそろったまま**: 拡張機能は自分で画面を描かず、ホームのタイル・コマンドの一覧 (Ctrl+K)・設定の項目・知らせを GetText に渡し、GetText が同じ部品で描きます。
+- **要求されるアクセスを見せる**: 入れる前に、拡張機能が使うと申告しているもの (読み取った画面の文字・クリップボード・インターネットなど) を出します。拡張機能は GetText と同じ権限で動くので、これは制限ではなく申告です。信頼できる発行元 (「公式」「確認済み」) のものを選んでください。
+- **安全に入れる**: パッケージは SHA-256 を確かめ、フォルダの外に出るファイル・リンク・大きすぎる展開を拒みます。読み込みの途中で落ちた拡張機能は、次の起動で止める (または前の版に戻す) ので、GetText は起動できます。`--safe-mode` で起動すると拡張機能を読み込みません。
+- **AI のモデルも 1 つずつ**: 設定 → モデルとセットアップ の「モデルの一覧」で、モデルを 1 つずつ入れる・消すことができます (取得済みのファイルはダウンロードしません)。
+
+公式の拡張機能 (配布物に同梱。入れたものだけが動きます):
+
+| 拡張機能 | できること |
+| --- | --- |
+| キーワードの見張り | 読み取った文字に決めた言葉が出たら知らせる |
+| スライドの記録 | 発表のスライドが変わるたびに残し、PPTX にまとめる |
+| 読み取りの履歴 | 読み取った文字を PC に保存して Ctrl+K で探す (既定は保存しない) |
+| 文書の文字の読み取り | PDF・画像のファイルの文字を TXT・Markdown・JSON に (まとめて読める) |
+| QR コード・バーコード | 範囲を選んで QR・JAN などを読んでコピー |
+| 訳を重ねる | 枠の中の外国語に、日本語の訳を重ねる |
+
+ほかに、どのアプリでも **Ctrl+Alt+Q** (Mac は ⌃⌥Q) で範囲を選んで文字をコピーする **Quick OCR**、自分のスクリプトから使う [開発者向けの API](docs/developer-api.md) (既定でオフ) があります。
+
+拡張機能の作り方: [docs/plugins/development.md](docs/plugins/development.md) ・ しくみ: [architecture.md](docs/plugins/architecture.md) ・ パッケージ: [package-format.md](docs/plugins/package-format.md) ・ 安全: [security.md](docs/plugins/security.md) ・ これから: [ROADMAP.md](ROADMAP.md)
+
 ## 別の PC で使う (セットアップ)
 
 紹介と使い方の動画: [docs/GetText_紹介と使い方.mp4](docs/GetText_紹介と使い方.mp4) (約 9 分・ナレーション付き。入れ方・ホーム (旧: 機能を選ぶ画面)・文字の読み取り・議事録 (録画と字幕つきの動画も)・画面の録画・設定。音声: VOICEVOX:No.7)
@@ -374,8 +400,11 @@ GetText は、利用者が指示したとき以外は、情報をほかのコン
 - 文字の読み取り・翻訳 (既定の「ローカル」)・議事録・要約・画面の録画は、すべて PC の中で行います。
 - 情報を外に送るのは、利用者が選んだ次のときだけです。
   - 翻訳を「Google」「DeepL」にしたとき: 読み取った文字をそのサービスに送ります。
-  - セットアップのとき: Python・AI のモデル・部品を、配布元 (python.org・Hugging Face・PyPI など) からダウンロードします。
+  - セットアップのとき・モデルの一覧で「入れる」を押したとき: Python・AI のモデル・部品を、配布元 (python.org・Hugging Face・PyPI など) からダウンロードします。
+  - 設定 → 拡張機能 で「オンラインで探す」「更新を確認」を押したとき・オンラインの拡張機能を入れたとき: GitHub から拡張機能の一覧とパッケージをダウンロードします (送る情報はありません)。
+  - インターネットを使うと申告している拡張機能を入れたとき: その拡張機能の説明のとおりに通信します (設定 → プライバシー に出ます)。
 - 利用の記録 (テレメトリ) は集めていません。記録 (ログ) は PC の中 (`%LOCALAPPDATA%\GetText\logs`) にだけ書きます。
+- 開発者向けの API は既定でオフです。オンにしても、この PC の中 (127.0.0.1) だけで受け、トークンの無い要求・ブラウザからの要求には答えません。
 
 ## ライセンス
 
@@ -399,7 +428,7 @@ Copyright (C) 2026 KoroCoding
   | [Silero VAD](https://github.com/snakers4/silero-vad) | 無音の検出 | MIT |
   | [Qwen3-4B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507) | 文脈による補正・要約・AI 訳 | Apache-2.0 |
 
-- **使っている部品** (セットアップで入れる・配布版に含まれる): .NET (MIT)、Avalonia (MIT)、CTranslate2 (MIT)、faster-whisper (MIT)、sherpa-onnx (Apache-2.0)、RapidOCR (Apache-2.0)、ONNX Runtime (MIT)、PyAV (BSD-3-Clause)、Pillow (MIT-CMU)、NumPy (BSD-3-Clause)、Janome (Apache-2.0) ほか。それぞれのライセンスは各配布元を参照してください。
+- **使っている部品** (セットアップで入れる・配布版に含まれる): .NET (MIT)、Avalonia (MIT)、ZXing.Net (Apache-2.0。拡張機能「QR コード・バーコード」の中だけ)、CTranslate2 (MIT)、faster-whisper (MIT)、sherpa-onnx (Apache-2.0)、RapidOCR (Apache-2.0)、ONNX Runtime (MIT)、PyAV (BSD-3-Clause)、Pillow (MIT-CMU)、NumPy (BSD-3-Clause)、Janome (Apache-2.0) ほか。それぞれのライセンスは各配布元を参照してください。
 - **音声** (`tests/assets/meeting.wav`・`docs/GetText_紹介と使い方.mp4` のナレーション): VOICEVOX で合成したもので、[VOICEVOX](https://voicevox.hiroshiba.jp/) と各キャラクターの利用規約に従います (VOICEVOX:No.7、VOICEVOX:四国めたん、VOICEVOX:青山龍星)。
 
 ## コード署名のポリシー
@@ -418,7 +447,7 @@ Windows 版の配布物 (GetText.exe・GetText.dll) は、[SignPath Foundation](
 dotnet test tests/GetText.Tests
 ```
 
-- 単体テスト (299 件。デザイントークンのコントラスト・コマンドの検索・枠ごとのまとまり・検索の位置も): 文脈補正、文字変換、言語判定、翻訳単位への分割、表の行のまとめ、蓄積モードの重なり検出、画面変化の判定、議事録の並べ替え・書き出し・読み込み、要約・★・メモの保存、字幕 (長い発言の区切り方)、音声の保存 (WAV の混ぜ方)、話者の色の見やすさ、Mac 版の文字変換が Windows と同じ結果になること
+- 単体テスト (デザイントークンのコントラスト・コマンドの検索・枠ごとのまとまり・検索の位置・拡張機能の安全な展開と読み込み・壊れた拡張機能の受け止め・モデルの一覧も): 文脈補正、文字変換、言語判定、翻訳単位への分割、表の行のまとめ、蓄積モードの重なり検出、画面変化の判定、議事録の並べ替え・書き出し・読み込み、要約・★・メモの保存、字幕 (長い発言の区切り方)、音声の保存 (WAV の混ぜ方)、話者の色の見やすさ、Mac 版の文字変換が Windows と同じ結果になること
 - 議事録の通しのセルフテスト: 正解の分かっている架空の会議の音声を、記録と同じ経路 (音声の保存 → 文字起こし → 話者の聞き分け → 補正) に流し、文字の誤り率・話者の正しさ・音声の保存と変換・発言の音声の位置・メモ・★・保存と読み込み・字幕・要約を確かめます (結果は `selftest_report.txt`。すべて合格で終了コード 0)。
   ```bash
   python tools/make_test_meeting.py meeting.wav truth.json

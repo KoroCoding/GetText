@@ -2,17 +2,52 @@ using System.Text;
 
 namespace GetText;
 
+/// <summary>
+/// 行の中の 1 文字・1 単語の位置 (OCR エンジンが返した位置。座標はキャプチャ元画像のピクセル)。
+/// AI OCR (RapidOCR) は文字ごと、Windows OCR は単語ごと。位置を返さないエンジンでは無し (行全体で扱う)。
+/// </summary>
+public sealed record OcrSpan(string Text, double Left, double Top, double Right, double Bottom, double? Confidence = null)
+{
+    /// <summary>空白を除いた文字数 (表示の文字と位置を対応させるときの単位)。</summary>
+    public int Glyphs => OcrSpans.CountGlyphs(Text);
+}
+
 /// <summary>1 行分の OCR 結果。座標はキャプチャ元画像のピクセル。</summary>
-public sealed record OcrLineData(IReadOnlyList<string> Words, double Left, double Top, double Right, double Bottom)
+/// <param name="Spans">行の中の文字・単語の位置 (空白を除いた文字の順。無ければ null)。</param>
+/// <param name="Confidence">行の確からしさ (0〜1。エンジンが返さなければ null)。</param>
+public sealed record OcrLineData(IReadOnlyList<string> Words, double Left, double Top, double Right, double Bottom,
+    IReadOnlyList<OcrSpan>? Spans = null, double? Confidence = null)
 {
     public string Compact => string.Concat(Words);
 }
 
 /// <param name="IsHeading">まとまりごとに表示するときの見出し (【1】など。画面の上の文字ではない)。</param>
-public sealed record OcrLineInfo(string Text, double Left, double Top, double Right, double Bottom, bool IsHeading = false)
+/// <param name="Spans">行の中の文字・単語の位置 (空白を除いた文字の数が Text と同じときだけ。違えば null)。</param>
+public sealed record OcrLineInfo(string Text, double Left, double Top, double Right, double Bottom, bool IsHeading = false,
+    IReadOnlyList<OcrSpan>? Spans = null)
 {
     public double Width => Right - Left;
     public double Height => Bottom - Top;
+}
+
+public static class OcrSpans
+{
+    /// <summary>空白を除いた文字数 (サロゲートペアは 1 文字)。</summary>
+    public static int CountGlyphs(string text)
+    {
+        int n = 0;
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (char.IsWhiteSpace(text[i])) continue;
+            if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1])) i++;
+            n++;
+        }
+        return n;
+    }
+
+    /// <summary>位置の情報が、この文字列とそろっているときだけ返す (文字の補正などで数が変わったら使わない)。</summary>
+    public static IReadOnlyList<OcrSpan>? IfMatching(IReadOnlyList<OcrSpan>? spans, string text) =>
+        spans is { Count: > 0 } && spans.Sum(s => s.Glyphs) == CountGlyphs(text) ? spans : null;
 }
 
 /// <summary>OCR 結果を段落 → 行 の構造で持つ。</summary>
@@ -30,7 +65,7 @@ public sealed class OcrDocument
         {
             var text = JoinWords(line.Words, joinCjk);
             if (correct) text = JapaneseCorrector.Correct(text);
-            var info = new OcrLineInfo(text, line.Left, line.Top, line.Right, line.Bottom);
+            var info = new OcrLineInfo(text, line.Left, line.Top, line.Right, line.Bottom, Spans: OcrSpans.IfMatching(line.Spans, text));
             if (info.Text.Length == 0) continue;
 
             // 行間が大きく空いていたら新しい段落

@@ -114,6 +114,17 @@ public partial class HomeWindow : Window
         ShowRecent((recent ?? []).Select(label => new RecentItem(label, label)).ToList());
     }
 
+    /// <summary>拡張機能を読み込んだ・外したとき: 機能のタイルを並べ直す (画面の作りは変わらない)。</summary>
+    internal void ReloadFeatures()
+    {
+        if (_demo || _exiting) return;
+        _tiles.Clear();
+        foreach (var feature in AppCommands.Features) _tiles.Add(new FeatureTile(feature));
+        FeatureList.ItemsSource = null;
+        FeatureList.ItemsSource = _tiles;
+        UpdateCards();
+    }
+
     /// <summary>画面の録画 (開いていなければ null)。</summary>
     public RecorderWindow? Recorder => _recorder;
 

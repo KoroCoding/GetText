@@ -1,0 +1,20 @@
+{
+  "id": "gettext.history",
+  "name": { "ja": "読み取りの履歴", "en": "OCR History" },
+  "version": "1.0.0",
+  "publisher": "KoroCoding",
+  "description": { "ja": "読み取った文字をこの PC に保存して、Ctrl+K で探せます。既定は保存しません。", "en": "Saves text read from the screen on this PC so you can search it with Ctrl+K. Off by default." },
+  "apiVersion": 1,
+  "minHostVersion": "1.1.0",
+  "platforms": ["any"],
+  "capabilities": ["ocr-history"],
+  "permissions": ["screen-text", "storage", "notifications"],
+  "dependencies": [],
+  "optionalDependencies": [],
+  "entryPoint": { "assembly": "bin/GetText.Plugin.History.dll", "type": "GetText.Plugins.History.HistoryPlugin" },
+  "requiresRestart": true,
+  "models": [],
+  "license": "GPL-3.0-or-later",
+  "homepage": "https://github.com/KoroCoding/GetText/tree/main/plugins/GetText.Plugin.History",
+  "icon": "History"
+}

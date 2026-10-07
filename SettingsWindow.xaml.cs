@@ -57,7 +57,9 @@ public partial class SettingsWindow : Window
         WrapCheck.IsChecked = settings.Wrap;
         ConvertBox.ItemsSource = SettingsOptions.ConvertModes;
         ConvertBox.SelectedItem = SettingsOptions.Find(SettingsOptions.ConvertModes, settings.Convert);
-        TopmostCheck.IsChecked = settings.Topmost;
+        TopmostCheck.IsChecked = settings.TextTopmost;
+        MinutesTopmostCheck.IsChecked = settings.MinutesTopmost;
+        RecorderTopmostCheck.IsChecked = settings.RecorderTopmost;
         FollowCheck.IsChecked = settings.Follow;
         OcrViewBox.ItemsSource = SettingsOptions.OcrViews;
         OcrViewBox.SelectedItem = SettingsOptions.Find(SettingsOptions.OcrViews, settings.OcrView);
@@ -72,6 +74,7 @@ public partial class SettingsWindow : Window
 
         BuildShortcuts();
         BuildPrivacy();
+        LoadDeveloperApi();
         UpdateDependentState();
         PreviewKeyDown += (_, e) =>
         {
@@ -127,6 +130,7 @@ public partial class SettingsWindow : Window
         foreach (var (p, panel) in _pages) panel.Visibility = p == page ? Visibility.Visible : Visibility.Collapsed;
         SearchResults.Visibility = Visibility.Collapsed;
         PageTitleText.Text = AppCommands.SettingsPages.First(x => x.Page == page).Title;
+        if (page == SettingsPage.Extensions) RefreshExtensions();
         PageScroll.ScrollToTop();
     }
 
@@ -241,6 +245,7 @@ public partial class SettingsWindow : Window
     {
         bool cloud = _settings.Translate && _settings.TranslationEngine != TranslationEngine.Local;
         string service = _settings.TranslationEngine == TranslationEngine.DeepL ? "DeepL" : "Google";
+        var plugins = PluginPermissions.Privacy(PluginRuntime.Plugins);
         PrivacyList.ItemsSource = new List<PrivacyRow>
         {
             new("文字の読み取り", "枠の中の画面は PC の中で読み取ります (AI OCR・Windows OCR とも)。画像は保存しません。", false, SettingsPage.ScreenOcr, "設定"),
@@ -249,6 +254,7 @@ public partial class SettingsWindow : Window
             new("話者の声の記憶", _settings.MinutesRememberVoices ? "名前を付けた話者の声の特徴 (数値) を PC に覚えます。音声そのものは保存しません。" : "覚えません。", false, SettingsPage.Meetings, "設定"),
             new("画面の録画", "録画は PC のフォルダに保存します。どこにも送りません。", false, SettingsPage.Recording, "設定"),
             new("セットアップ", "AI のモデルを入れるときだけ、配布元 (Hugging Face など) からダウンロードします。", true, SettingsPage.Models, "開く"),
+            new("拡張機能", plugins.Text, plugins.Online, SettingsPage.Extensions, "開く"),
         };
     }
 
@@ -411,6 +417,7 @@ public partial class SettingsWindow : Window
         SetPill(AiOcrPill, AiOcrPillText, AiOcr.IsInstalled);
         SetPill(TranslationPill, TranslationPillText, LocalTranslator.IsInstalled);
         SetPill(MinutesPill, MinutesPillText, TranscriptionService.IsInstalled);
+        if (_demoModels == null && _modelCancel == null) RefreshModels();
         var version = Assembly.GetExecutingAssembly().GetName().Version;
         VersionText.Text = $"GetText {version?.ToString(3)} ・ .NET {Environment.Version}";
     }
@@ -670,10 +677,25 @@ public partial class SettingsWindow : Window
         Changed(nameof(AppSettings.Convert));
     }
 
+    /// <summary>議事録・画面の録画の「常に手前に表示」(窓ごと)。</summary>
+    private void WindowTopmost_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender == MinutesTopmostCheck)
+        {
+            _settings.MinutesTopmost = MinutesTopmostCheck.IsChecked == true;
+            Changed(nameof(AppSettings.MinutesTopmost));
+        }
+        else
+        {
+            _settings.RecorderTopmost = RecorderTopmostCheck.IsChecked == true;
+            Changed(nameof(AppSettings.RecorderTopmost));
+        }
+    }
+
     private void TopmostCheck_Click(object sender, RoutedEventArgs e)
     {
-        _settings.Topmost = TopmostCheck.IsChecked == true;
-        Changed(nameof(AppSettings.Topmost));
+        _settings.TextTopmost = TopmostCheck.IsChecked == true;
+        Changed(nameof(AppSettings.TextTopmost));
     }
 
     private void FollowCheck_Click(object sender, RoutedEventArgs e)

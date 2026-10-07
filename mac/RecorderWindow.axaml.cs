@@ -55,6 +55,7 @@ public partial class RecorderWindow : Window
     public RecorderWindow(AppSettings settings)
     {
         InitializeComponent();
+        Topmost = settings.RecorderTopmost; // (設定 → 画面の録画 の「常に手前に表示」)
         _settings = settings;
         QualityBox.ItemsSource = RecordOptionsList.Quality;
         QualityBox.SelectedIndex = settings.RecordHighQuality ? 1 : 0;

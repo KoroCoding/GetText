@@ -1,0 +1,20 @@
+{
+  "id": "gettext.presentation",
+  "name": { "ja": "スライドの記録", "en": "Presentation Capture" },
+  "version": "1.0.0",
+  "publisher": "KoroCoding",
+  "description": { "ja": "発表のスライドが変わるたびに残し、PPTX にまとめます。画像はこの PC にだけ保存します。", "en": "Captures each new slide of a presentation and saves them as a PPTX. Images stay on this PC." },
+  "apiVersion": 1,
+  "minHostVersion": "1.1.0",
+  "platforms": ["any"],
+  "capabilities": ["presentation-capture"],
+  "permissions": ["screen-capture", "files", "storage", "notifications"],
+  "dependencies": [],
+  "optionalDependencies": [],
+  "entryPoint": { "assembly": "bin/GetText.Plugin.Presentation.dll", "type": "GetText.Plugins.Presentation.PresentationPlugin" },
+  "requiresRestart": true,
+  "models": [],
+  "license": "GPL-3.0-or-later",
+  "homepage": "https://github.com/KoroCoding/GetText/tree/main/plugins/GetText.Plugin.Presentation",
+  "icon": "Presentation"
+}

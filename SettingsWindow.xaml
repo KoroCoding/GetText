@@ -65,6 +65,36 @@
             <Setter Property="Visibility" Value="Collapsed"/>
             <Setter Property="Margin" Value="0,0,0,24"/>
         </Style>
+        <!-- 拡張機能のページの切り替え (入れたもの・見つける・更新): 選んでいるものは下の線と太字で示す (色だけに頼らない) -->
+        <Style x:Key="ExtTab" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource Gt.TextSecondary}"/>
+            <Setter Property="GroupName" Value="ExtTabs"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource RoundFocusVisual}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid>
+                            <Border x:Name="Bg" Background="Transparent" CornerRadius="{StaticResource Gt.Radius.Button}"/>
+                            <ContentPresenter Margin="12,6,12,8"/>
+                            <Border x:Name="Mark" Height="3" CornerRadius="2" Margin="12,0" VerticalAlignment="Bottom"
+                                    Background="{DynamicResource AccentFillColorDefaultBrush}" Visibility="Hidden"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource Gt.SubtleHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Mark" Property="Visibility" Value="Visible"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Gt.TextPrimary}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <!-- 送る・送らないの印 (アイコン + 文字) -->
         <Style x:Key="PlacePill" TargetType="Border">
             <Setter Property="CornerRadius" Value="12"/>
@@ -161,6 +191,17 @@
                             </Border>
                             <TextBlock Style="{StaticResource Icon}" Text="{local:Icon Model}" Margin="0,0,12,0"/>
                             <TextBlock Text="モデルとセットアップ"/>
+                        </DockPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NavExtensions" Style="{StaticResource NavItem}" Tag="Extensions" Checked="Nav_Checked">
+                        <DockPanel>
+                            <!-- 再起動で反映するものがあるときの印 (文字で示す) -->
+                            <Border x:Name="ExtensionsBadge" DockPanel.Dock="Right" Style="{StaticResource StatusPill}" Background="{DynamicResource Gt.AccentSubtle}"
+                                    Margin="8,0,0,0" Padding="6,0" Visibility="Collapsed">
+                                <TextBlock x:Name="ExtensionsBadgeText" FontSize="{StaticResource Gt.Font.Caption}" Foreground="{DynamicResource Gt.AccentText}"/>
+                            </Border>
+                            <TextBlock Style="{StaticResource Icon}" Text="{local:Icon Extensions}" Margin="0,0,12,0"/>
+                            <TextBlock Text="拡張機能"/>
                         </DockPanel>
                     </RadioButton>
 
@@ -456,6 +497,15 @@
                     <StackPanel Style="{StaticResource Page}" Tag="Meetings">
                         <Border Style="{StaticResource SettingRow}">
                             <DockPanel>
+                                <CheckBox x:Name="MinutesTopmostCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="WindowTopmost_Click"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="議事録の画面を常に手前に表示する"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="ほかのアプリを使っている間も、議事録の画面を前に出しておきます。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
                                 <CheckBox x:Name="MinutesTimeCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="MinutesDisplay_Click"/>
                                 <StackPanel>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="発言の時刻を表示する"/>
@@ -516,6 +566,15 @@
 
                     <!-- ───────── 画面の録画 ───────── -->
                     <StackPanel Style="{StaticResource Page}" Tag="Recording">
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <CheckBox x:Name="RecorderTopmostCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="WindowTopmost_Click"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="録画の画面を常に手前に表示する"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="ほかのアプリを使っている間も、録画の画面を前に出しておきます。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
                         <Border Style="{StaticResource SettingRow}">
                             <DockPanel>
                                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
@@ -591,6 +650,211 @@
                                 </StackPanel>
                             </DockPanel>
                         </Border>
+
+                        <!-- モデルを 1 つずつ入れる・消す (取得済みのファイルはダウンロードしない) -->
+                        <TextBlock Style="{StaticResource SettingHeader}" Text="モデルの一覧"/>
+                        <TextBlock x:Name="ModelListNote" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="4,0,0,8"/>
+                        <Border x:Name="ModelErrorBar" Style="{StaticResource InfoBar}" Visibility="Collapsed">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="{local:Icon Close}" FontSize="10" VerticalAlignment="Top"
+                                        Click="ModelErrorClose_Click" ToolTip="閉じる" AutomationProperties.Name="知らせを閉じる"/>
+                                <TextBlock Style="{StaticResource Icon}" Text="{local:Icon Error}" Foreground="{DynamicResource Gt.Critical}" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                                <TextBlock x:Name="ModelErrorText" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource Gt.TextPrimary}"/>
+                            </DockPanel>
+                        </Border>
+                        <StackPanel x:Name="ModelProgressPanel" Margin="0,0,0,8" Visibility="Collapsed">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Content="中止" Click="ModelCancel_Click" Margin="8,0,0,0"/>
+                                <TextBlock x:Name="ModelProgressText" Style="{StaticResource Caption}" VerticalAlignment="Center"/>
+                            </DockPanel>
+                            <ProgressBar x:Name="ModelProgress" Height="4" Margin="0,4,0,0" Maximum="1" IsIndeterminate="True"/>
+                        </StackPanel>
+                        <ItemsControl x:Name="ModelList" Focusable="False">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource SettingRow}" AutomationProperties.Name="{Binding AccessibleName}">
+                                        <DockPanel>
+                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                                                <Border Style="{StaticResource StatusPill}" Background="{Binding StateBackground}" Margin="0,0,8,0">
+                                                    <TextBlock Text="{Binding StateLabel}" FontSize="{StaticResource Gt.Font.Caption}" Foreground="{Binding StateForeground}"/>
+                                                </Border>
+                                                <Button Content="{Binding InstallLabel}" Visibility="{Binding InstallVisibility}" IsEnabled="{Binding CanAct}"
+                                                        Click="ModelInstall_Click" Margin="8,0,0,0"/>
+                                                <Button Content="消す" Visibility="{Binding RemoveVisibility}" IsEnabled="{Binding CanAct}"
+                                                        Click="ModelRemove_Click" Margin="8,0,0,0"/>
+                                            </StackPanel>
+                                            <StackPanel>
+                                                <TextBlock Style="{StaticResource SettingLabel}" Text="{Binding Name}"/>
+                                                <TextBlock Style="{StaticResource SettingDescription}" Text="{Binding Purpose}"/>
+                                                <TextBlock Text="{Binding Meta}" FontSize="{StaticResource Gt.Font.Caption}" Foreground="{Binding MetaForeground}"
+                                                           TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- ───────── 拡張機能 ───────── -->
+                    <StackPanel Style="{StaticResource Page}" Tag="Extensions">
+                        <!-- 再起動で反映する変更がある -->
+                        <Border x:Name="ExtRestartBar" Style="{StaticResource InfoBar}" Visibility="Collapsed">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Content="今すぐ再起動" Margin="12,0,4,0" VerticalAlignment="Center"
+                                        Style="{StaticResource AccentButtonStyle}" Click="ExtRestart_Click"/>
+                                <TextBlock Style="{StaticResource Icon}" Text="{local:Icon Info}" Foreground="{DynamicResource Gt.AccentText}"
+                                           VerticalAlignment="Top" Margin="0,2,12,0"/>
+                                <TextBlock x:Name="ExtRestartText" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource Gt.TextPrimary}"
+                                           Text="変更は GetText を再起動すると反映されます。"/>
+                            </DockPanel>
+                        </Border>
+                        <!-- 問題 (入れられなかった・一覧を取れなかった) -->
+                        <Border x:Name="ExtErrorBar" Style="{StaticResource InfoBar}" Visibility="Collapsed">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="{local:Icon Close}" FontSize="10" VerticalAlignment="Top"
+                                        Click="ExtErrorClose_Click" ToolTip="閉じる" AutomationProperties.Name="知らせを閉じる"/>
+                                <TextBlock x:Name="ExtErrorIcon" Style="{StaticResource Icon}" Text="{local:Icon Warning}" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                                <TextBlock x:Name="ExtErrorText" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource Gt.TextPrimary}"/>
+                            </DockPanel>
+                        </Border>
+
+                        <!-- 切り替え・検索・操作 -->
+                        <DockPanel Margin="0,0,0,8">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="ExtOnlineButton" Content="オンラインで探す" Margin="8,0,0,0" Click="ExtOnline_Click"
+                                        ToolTip="GitHub の拡張機能の一覧を読み込みます (押したときだけ接続します)"/>
+                                <Button Content="ファイルから入れる…" Margin="8,0,0,0" Click="ExtInstallFile_Click"
+                                        ToolTip=".gtplugin のファイルを選んで入れます"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" KeyboardNavigation.DirectionalNavigation="Cycle">
+                                <RadioButton x:Name="ExtTabInstalled" Style="{StaticResource ExtTab}" IsChecked="True" Checked="ExtTab_Checked" Tag="Installed">
+                                    <TextBlock x:Name="ExtTabInstalledText" Text="入れたもの"/>
+                                </RadioButton>
+                                <RadioButton x:Name="ExtTabDiscover" Style="{StaticResource ExtTab}" Checked="ExtTab_Checked" Tag="Discover">
+                                    <TextBlock x:Name="ExtTabDiscoverText" Text="見つける"/>
+                                </RadioButton>
+                                <RadioButton x:Name="ExtTabUpdates" Style="{StaticResource ExtTab}" Checked="ExtTab_Checked" Tag="Updates">
+                                    <TextBlock x:Name="ExtTabUpdatesText" Text="更新"/>
+                                </RadioButton>
+                            </StackPanel>
+                        </DockPanel>
+                        <Border Background="{DynamicResource Gt.Surface}" BorderBrush="{DynamicResource Gt.Border}" BorderThickness="1"
+                                CornerRadius="{StaticResource Gt.Radius.Input}" Padding="12,4,4,4" Margin="0,0,0,8">
+                            <DockPanel>
+                                <Button x:Name="ExtSearchClear" DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="{local:Icon Close}" FontSize="10"
+                                        Visibility="Collapsed" Click="ExtSearchClear_Click" ToolTip="検索を消す" AutomationProperties.Name="拡張機能の検索を消す"/>
+                                <TextBlock Style="{StaticResource Icon}" Text="{local:Icon Search}" FontSize="14" Foreground="{DynamicResource Gt.TextSecondary}" Margin="0,0,8,0"/>
+                                <Grid>
+                                    <TextBox x:Name="ExtSearch" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource Gt.TextPrimary}"
+                                             CaretBrush="{DynamicResource Gt.TextPrimary}" Padding="0,4" VerticalContentAlignment="Center"
+                                             TextChanged="ExtSearch_TextChanged" AutomationProperties.Name="拡張機能を検索">
+                                        <TextBox.Template>
+                                            <ControlTemplate TargetType="TextBox">
+                                                <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
+                                            </ControlTemplate>
+                                        </TextBox.Template>
+                                    </TextBox>
+                                    <TextBlock x:Name="ExtSearchPlaceholder" Text="名前・説明・発行元・アクセスで探す" IsHitTestVisible="False" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Gt.TextTertiary}"/>
+                                </Grid>
+                            </DockPanel>
+                        </Border>
+
+                        <!-- 進み具合 (入れている・一覧を読んでいる) -->
+                        <StackPanel x:Name="ExtProgressPanel" Margin="0,0,0,8" Visibility="Collapsed">
+                            <TextBlock x:Name="ExtProgressText" Style="{StaticResource Caption}"/>
+                            <ProgressBar x:Name="ExtProgress" Height="4" Margin="0,4,0,0" Maximum="1" IsIndeterminate="True"/>
+                        </StackPanel>
+                        <TextBlock x:Name="ExtSourceText" Style="{StaticResource Caption}" Margin="4,0,0,8" TextWrapping="Wrap"/>
+
+                        <ItemsControl x:Name="ExtList" Focusable="False">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource SettingRow}" AutomationProperties.Name="{Binding AccessibleName}">
+                                        <StackPanel>
+                                            <DockPanel>
+                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,0,0,0">
+                                                    <Button Content="{Binding PrimaryLabel}" Visibility="{Binding PrimaryVisibility}" Style="{StaticResource AccentButtonStyle}"
+                                                            Click="ExtPrimary_Click" Margin="8,0,0,0" IsEnabled="{Binding CanAct}"/>
+                                                    <Button Content="{Binding ToggleLabel}" Visibility="{Binding ToggleVisibility}" Click="ExtToggle_Click" Margin="8,0,0,0"
+                                                            IsEnabled="{Binding CanAct}"/>
+                                                    <Button Content="{Binding RemoveLabel}" Visibility="{Binding RemoveVisibility}" Click="ExtRemove_Click" Margin="8,0,0,0"
+                                                            IsEnabled="{Binding CanAct}"/>
+                                                </StackPanel>
+                                                <Border DockPanel.Dock="Left" Width="40" Height="40" CornerRadius="{StaticResource Gt.Radius.Button}"
+                                                        Background="{DynamicResource Gt.SubtleHover}" VerticalAlignment="Top" Margin="0,0,12,0">
+                                                    <TextBlock Style="{StaticResource Icon}" Text="{Binding Glyph}" FontSize="20" HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center" Foreground="{DynamicResource Gt.AccentText}"/>
+                                                </Border>
+                                                <StackPanel>
+                                                    <WrapPanel>
+                                                        <TextBlock Style="{StaticResource SettingLabel}" Text="{Binding Name}" Margin="0,0,8,0"/>
+                                                        <Border Style="{StaticResource StatusPill}" Background="{Binding TrustBackground}" Margin="0,0,6,0">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Style="{StaticResource Icon}" Text="{Binding TrustGlyph}" FontSize="10" Foreground="{Binding TrustForeground}"
+                                                                           VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                                <TextBlock Text="{Binding TrustLabel}" FontSize="{StaticResource Gt.Font.Caption}" Foreground="{Binding TrustForeground}"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                        <Border Style="{StaticResource StatusPill}" Background="{Binding StateBackground}" Visibility="{Binding StateVisibility}">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Style="{StaticResource Icon}" Text="{Binding StateGlyph}" FontSize="10" Foreground="{Binding StateForeground}"
+                                                                           VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                                <TextBlock Text="{Binding StateLabel}" FontSize="{StaticResource Gt.Font.Caption}" Foreground="{Binding StateForeground}"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </WrapPanel>
+                                                    <TextBlock Style="{StaticResource Caption}" Text="{Binding Meta}" Margin="0,2,0,0"/>
+                                                    <TextBlock Style="{StaticResource SettingDescription}" Text="{Binding Description}" Margin="0,4,0,0"/>
+                                                    <TextBlock Text="{Binding Detail}" Visibility="{Binding DetailVisibility}" Foreground="{Binding DetailForeground}"
+                                                               TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                                    <!-- 要求されるアクセス (申告。制限ではない) -->
+                                                    <DockPanel Margin="0,6,0,0" Visibility="{Binding PermissionsVisibility}">
+                                                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource Caption}" Text="要求されるアクセス:" VerticalAlignment="Top" Margin="0,4,0,0"/>
+                                                        <ItemsControl ItemsSource="{Binding Permissions}" Focusable="False">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <WrapPanel/>
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Border Style="{StaticResource Chip}" Margin="6,2,0,2" ToolTip="{Binding Description}">
+                                                                        <TextBlock Text="{Binding Label}" FontSize="{StaticResource Gt.Font.Caption}"
+                                                                                   Foreground="{DynamicResource Gt.TextSecondary}"/>
+                                                                    </Border>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </DockPanel>
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <!-- 拡張機能の設定 (GetText が自分の部品で描く) -->
+                                            <Expander Header="設定" Margin="52,8,0,0" Visibility="{Binding SettingsVisibility}" Content="{Binding SettingsPanel}"/>
+                                            <Expander Header="詳細" Margin="52,4,0,0">
+                                                <StackPanel Margin="0,4,0,0">
+                                                    <TextBlock Text="{Binding DetailsText}" Style="{StaticResource SettingDescription}" TextWrapping="Wrap"/>
+                                                    <Button Content="診断をコピー" HorizontalAlignment="Left" Margin="0,8,0,0" Click="ExtCopyDiagnostics_Click"
+                                                            Visibility="{Binding DiagnosticsVisibility}"
+                                                            ToolTip="問題を報告するときに貼り付けます (読み取った文字・キー・ユーザー名は入れません)"/>
+                                                </StackPanel>
+                                            </Expander>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- 空の状態 -->
+                        <StackPanel x:Name="ExtEmpty" Margin="0,24" Visibility="Collapsed">
+                            <TextBlock Style="{StaticResource Icon}" Text="{local:Icon Extensions}" FontSize="28" HorizontalAlignment="Left"
+                                       Foreground="{DynamicResource Gt.TextTertiary}" Margin="0,0,0,8"/>
+                            <TextBlock x:Name="ExtEmptyTitle" FontWeight="SemiBold" Foreground="{DynamicResource Gt.TextPrimary}"/>
+                            <TextBlock x:Name="ExtEmptyDetail" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+
+                        <TextBlock x:Name="ExtNotice" Style="{StaticResource Caption}" Margin="4,16,0,0" TextWrapping="Wrap"/>
                     </StackPanel>
 
                     <!-- ───────── 診断 ───────── -->
@@ -619,6 +883,34 @@
                                 <StackPanel>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="モデルのフォルダ"/>
                                     <TextBlock Style="{StaticResource SettingDescription}" Text="AI の機能の Python とモデルがあります。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <TextBlock Style="{StaticResource SettingHeader}" Text="開発者向け"/>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <CheckBox x:Name="DeveloperApiCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="DeveloperApi_Click"
+                                          AutomationProperties.Name="開発者向けの API"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="開発者向けの API"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}"
+                                               Text="この PC の中 (127.0.0.1) だけで、表示中の文字・画像の読み取り・翻訳を HTTP で使えます。トークンが必要で、ブラウザからは使えません。既定はオフ。"/>
+                                    <TextBlock x:Name="DeveloperApiStatus" Style="{StaticResource SettingDescription}"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                                    <TextBox x:Name="DeveloperApiPortBox" Width="72" VerticalAlignment="Center" LostFocus="DeveloperApiPort_LostFocus"
+                                             AutomationProperties.Name="API の番号 (ポート)"/>
+                                    <Button Content="トークンをコピー" Margin="8,0,0,0" Click="DeveloperApiCopyToken_Click"/>
+                                    <Button Content="作り直す" Margin="8,0,0,0" Click="DeveloperApiRenewToken_Click"/>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="API の番号とトークン"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}"
+                                               Text="トークンを作り直すと、前のトークンは使えなくなります。使い方は docs/developer-api.md を見てください。"/>
                                 </StackPanel>
                             </DockPanel>
                         </Border>

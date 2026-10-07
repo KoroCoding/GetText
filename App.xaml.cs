@@ -139,10 +139,18 @@ public partial class App : Application
             Home?.StopRecordingNow(); // 録画を書き終える (途中で切ると動画のファイルが壊れる)
             text?.SaveOnSessionEnd();
         };
+        // 拡張機能: ホームを出した後に読み込む (起動を遅くしない)
+        if (text != null)
+        {
+            var textWindow = text;
+            WindowsPluginHost.Start(e.Args, textWindow, () => textWindow.OpenSettings(SettingsPage.Extensions, Home));
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        PluginRuntime.ShutdownAll(); // (各拡張機能 2 秒まで待つ)
+        DeveloperApiControl.Stop();
         _singleInstance?.Dispose();
         Home?.RunAfterExit(); // (設定の「セットアップをやり直す」: GetText を終えてから始める)
         base.OnExit(e);
@@ -159,6 +167,13 @@ public partial class App : Application
         };
         if (Current.ThemeMode != mode) Current.ThemeMode = mode;
         Theme.Apply(theme);
+    }
+
+    /// <summary>GetText を再起動する (拡張機能の変更を反映する)。録画・議事録を止めてよいかは先に聞く。Safe Mode のときは普通に起動し直す。</summary>
+    internal static void Restart()
+    {
+        if (Home == null || Environment.ProcessPath is not { } exe) return;
+        Home.ExitThen(() => Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false })?.Dispose());
     }
 
     private static void ActivateExisting()

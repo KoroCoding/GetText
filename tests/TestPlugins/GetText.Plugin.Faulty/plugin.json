@@ -1,0 +1,17 @@
+{
+  "id": "gettext.test.faulty",
+  "name": { "ja": "テスト用の壊れた拡張機能", "en": "Faulty Test Plugin" },
+  "version": "1.0.0",
+  "publisher": "KoroCoding",
+  "description": "単体テスト用。配布しない。",
+  "apiVersion": 1,
+  "minHostVersion": "1.1.0",
+  "platforms": ["any"],
+  "capabilities": [],
+  "permissions": ["notifications", "screen-text"],
+  "dependencies": [],
+  "optionalDependencies": [],
+  "entryPoint": { "assembly": "bin/GetText.Plugin.Faulty.dll", "type": "GetText.Plugins.Faulty.FaultyPlugin" },
+  "requiresRestart": true,
+  "license": "GPL-3.0-or-later"
+}

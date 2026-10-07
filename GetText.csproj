@@ -11,7 +11,7 @@
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <AssemblyName>GetText</AssemblyName>
     <RootNamespace>GetText</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <!-- 実行ファイルに入れる情報 (コード署名の条件: 製品名と版を入れる) -->
     <Product>GetText</Product>
     <AssemblyTitle>GetText</AssemblyTitle>
@@ -30,6 +30,10 @@
     <Compile Remove="mac\**" />
     <None Remove="mac\**" />
     <Page Remove="mac\**" />
+    <!-- 拡張機能の契約 (sdk) と拡張機能 (plugins) は別のプロジェクト -->
+    <Compile Remove="sdk\**;plugins\**" />
+    <None Remove="sdk\**;plugins\**" />
+    <Page Remove="sdk\**;plugins\**" />
     <InternalsVisibleTo Include="GetText.Tests" />
   </ItemGroup>
 
@@ -43,6 +47,10 @@
 
   <ItemGroup>
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="sdk\GetText.Plugin.Abstractions\GetText.Plugin.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>

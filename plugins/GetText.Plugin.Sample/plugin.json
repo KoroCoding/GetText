@@ -1,0 +1,20 @@
+{
+  "id": "gettext.sample",
+  "name": { "ja": "見本の拡張機能", "en": "Sample Plugin" },
+  "version": "1.0.0",
+  "publisher": "KoroCoding",
+  "description": { "ja": "拡張機能の作り方の見本です。ホームのタイル・コマンド・設定・知らせを登録します。", "en": "A minimal sample: a Home tile, a command, a setting and a notification." },
+  "apiVersion": 1,
+  "minHostVersion": "1.1.0",
+  "platforms": ["any"],
+  "capabilities": ["sample.greeting"],
+  "permissions": ["notifications", "storage"],
+  "dependencies": [],
+  "optionalDependencies": [],
+  "entryPoint": { "assembly": "bin/GetText.Plugin.Sample.dll", "type": "GetText.Plugins.Sample.SamplePlugin" },
+  "requiresRestart": true,
+  "models": [],
+  "license": "GPL-3.0-or-later",
+  "homepage": "https://github.com/KoroCoding/GetText/tree/main/plugins/GetText.Plugin.Sample",
+  "icon": "Extensions"
+}

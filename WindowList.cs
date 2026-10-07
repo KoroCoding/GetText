@@ -158,6 +158,40 @@ public static class WindowList
         }
     }
 
+    /// <summary>
+    /// 画面のその位置 (物理ピクセル) にある、いちばん手前の窓のアプリの名前と題名 (GetText の窓は飛ばす)。無ければ null。
+    /// 読み取りの範囲の下のアプリを拡張機能に知らせる (読み取りの履歴で、除くアプリを効かせるため)。
+    /// </summary>
+    public static (string App, string Title)? WindowAt(int x, int y)
+    {
+        int self = Environment.ProcessId;
+        (string, string)? found = null;
+        EnumWindows((hwnd, _) =>
+        {
+            if (!IsWindowVisible(hwnd)) return true;
+            if (DwmGetWindowAttribute(hwnd, 14 /* DWMWA_CLOAKED */, out int cloaked, 4) == 0 && cloaked != 0) return true;
+            if (!GetWindowRect(hwnd, out var r) || x < r.Left || x >= r.Right || y < r.Top || y >= r.Bottom) return true;
+            GetWindowThreadProcessId(hwnd, out int pid);
+            if (pid == self || pid == 0) return true;
+            int length = GetWindowTextLength(hwnd);
+            var title = new StringBuilder(length + 1);
+            if (length > 0) GetWindowText(hwnd, title, title.Capacity);
+            try
+            {
+                var name = Process.GetProcessById(pid).ProcessName;
+                if (string.Equals(name, "ApplicationFrameHost", StringComparison.OrdinalIgnoreCase) && HostedApp(hwnd, pid) is int app)
+                    name = Process.GetProcessById(app).ProcessName;
+                found = (name, title.ToString());
+            }
+            catch (ArgumentException)
+            {
+                return true; // (終わったプロセス)
+            }
+            return false;
+        }, IntPtr.Zero);
+        return found;
+    }
+
     // ApplicationFrameHost の窓の中にある、別のプロセス (ストアアプリ本体) の画面のプロセス ID
     private static int? HostedApp(IntPtr frame, int framePid)
     {

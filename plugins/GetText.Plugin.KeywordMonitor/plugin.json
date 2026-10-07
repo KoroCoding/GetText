@@ -1,0 +1,20 @@
+{
+  "id": "gettext.keyword-monitor",
+  "name": { "ja": "キーワードの見張り", "en": "Keyword Monitor" },
+  "version": "1.0.0",
+  "publisher": "KoroCoding",
+  "description": { "ja": "読み取った文字に決めた言葉が出たら知らせます。文字は保存も送信もしません。", "en": "Notifies you when a keyword appears in the text read from the screen. Nothing is saved or sent." },
+  "apiVersion": 1,
+  "minHostVersion": "1.1.0",
+  "platforms": ["any"],
+  "capabilities": ["keyword-monitor"],
+  "permissions": ["screen-text", "notifications", "storage"],
+  "dependencies": [],
+  "optionalDependencies": [],
+  "entryPoint": { "assembly": "bin/GetText.Plugin.KeywordMonitor.dll", "type": "GetText.Plugins.KeywordMonitor.KeywordMonitorPlugin" },
+  "requiresRestart": true,
+  "models": [],
+  "license": "GPL-3.0-or-later",
+  "homepage": "https://github.com/KoroCoding/GetText/tree/main/plugins/GetText.Plugin.KeywordMonitor",
+  "icon": "Search"
+}

@@ -22,6 +22,8 @@ public enum CommandCategory
     Recent,
     Settings,
     Extension,
+    /// <summary>拡張機能の検索 (読み取りの履歴など) で見つかったもの。押すとコピーする。</summary>
+    SearchResult,
 }
 
 /// <summary>
@@ -174,6 +176,7 @@ public static class CommandSearch
         CommandCategory.Recent => "最近",
         CommandCategory.Settings => "設定",
         CommandCategory.Extension => "拡張機能",
+        CommandCategory.SearchResult => "見つかった文字",
         _ => "操作",
     };
 

@@ -44,7 +44,11 @@ public partial class CommandPalette : Window
             if (e.InitialPressMouseButton == MouseButton.Left && Results.SelectedItem != null) RunSelected();
         }, RoutingStrategies.Bubble, handledEventsToo: true);
         Deactivated += (_, _) => { if (!_closing && IsVisible && !App.DemoMode) Close(); };
-        Closed += (_, _) => { if (_open == this) _open = null; };
+        Closed += (_, _) =>
+        {
+            _search?.Cancel();
+            if (_open == this) _open = null;
+        };
         Opened += (_, _) => QueryBox.Focus();
         Refresh();
     }
@@ -73,14 +77,42 @@ public partial class CommandPalette : Window
 
     internal static CommandPalette? Current => _open;
 
+    private CancellationTokenSource? _search;
+
     private void Refresh()
     {
-        var items = _registry.Search(QueryBox.Text ?? "", _context).Select(c => new PaletteItem(c)).ToList();
+        var query = QueryBox.Text ?? "";
+        var items = _registry.Search(query, _context).Select(c => new PaletteItem(c)).ToList();
+        Show(items, keepSelection: false);
+        SearchPluginsAsync(query, items);
+    }
+
+    private void Show(List<PaletteItem> items, bool keepSelection)
+    {
+        int selected = Results.SelectedIndex;
         Results.ItemsSource = items;
-        if (items.Count > 0) Results.SelectedIndex = 0;
+        if (items.Count > 0) Results.SelectedIndex = keepSelection && selected >= 0 && selected < items.Count ? selected : 0;
         EmptyState.IsVisible = items.Count == 0;
         Results.IsVisible = items.Count > 0;
         CountText.Text = items.Count == 0 ? "" : $"{items.Count} 件";
+    }
+
+    /// <summary>拡張機能の検索 (読み取りの履歴など) の結果を、少し待ってからコマンドの下に足す (打っている間は探さない)。</summary>
+    private async void SearchPluginsAsync(string query, List<PaletteItem> commands)
+    {
+        _search?.Cancel();
+        if (query.Trim().Length < PluginSearch.MinQueryLength || !PluginSearch.HasProviders) return;
+        var cts = _search = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(200, cts.Token);
+            var found = await PluginSearch.SearchAsync(query, 20, cts.Token, copied: PluginSearch.CopyAndNotify);
+            if (cts.IsCancellationRequested || !IsVisible || found.Count == 0) return;
+            Show([.. commands, .. found.Select(c => new PaletteItem(c))], keepSelection: true);
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
     internal void SetQuery(string text) => QueryBox.Text = text;
@@ -122,7 +154,9 @@ public partial class CommandPalette : Window
         {
             try
             {
-                if (!_registry.TryRun(item.Command.Id)) App.Log("Command", new InvalidOperationException("今は使えないコマンドです: " + item.Command.Id));
+                // 拡張機能の検索で見つかったもの (登録していないコマンド) は、そのまま行う
+                if (item.Command.Category == CommandCategory.SearchResult) item.Command.Execute();
+                else if (!_registry.TryRun(item.Command.Id)) App.Log("Command", new InvalidOperationException("今は使えないコマンドです: " + item.Command.Id));
             }
             catch (Exception ex)
             {

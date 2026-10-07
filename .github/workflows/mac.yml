@@ -5,7 +5,7 @@ name: Mac
 
 on:
   push:
-    branches: [main]
+    branches: [main, plugin-platform-rc]
     tags: ['v*']
   workflow_dispatch:
     inputs:

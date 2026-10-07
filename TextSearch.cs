@@ -39,8 +39,11 @@ public static class TextSearch
     }
 
     /// <summary>
-    /// 表示の文字 (shown。文字変換した後のもの) の中の見つかった所を、文書の行の位置に置き換える。
-    /// 表示の行と文書の行は改行の位置で対応させ、行の中は文字数の割合で位置を決める。見出し (【1】) の行は画面に無いので除く。
+    /// 表示の文字 (shown。文字変換した後のもの) の中の見つかった所を、読み取った画像の上の位置にする。
+    /// 表示の行と文書の行は改行の位置で対応させる。行の中は、OCR エンジンが返した文字・単語の位置 (Spans) を使い、
+    /// 空白を除いた文字の順で一致した部分に重なるものを合わせた範囲にする (AI OCR は文字ごと、Windows OCR は単語ごとの精度)。
+    /// 位置が無いエンジンや、表示の文字と数が合わない行は、一致した文字の位置を推測せず、行全体を返す。
+    /// 見出し (【1】) の行は画面に無いので除く。
     /// </summary>
     public static List<MatchBox> ToBoxes(OcrDocument doc, string shown, IReadOnlyList<TextMatch> matches)
     {
@@ -48,26 +51,69 @@ public static class TextSearch
         if (matches.Count == 0) return boxes;
         var lines = doc.Lines.ToList();
         // 表示の各行の始まりの位置と、対応する文書の行
-        var spans = new List<(int Start, int Length, OcrLineInfo Line)>();
+        var spans = new List<(int Start, string Row, OcrLineInfo Line)>();
         int pos = 0, index = 0;
         foreach (var part in shown.Split('\n'))
         {
             string row = part.TrimEnd('\r');
-            if (row.Length > 0 && index < lines.Count) spans.Add((pos, row.Length, lines[index++]));
+            if (row.Length > 0 && index < lines.Count) spans.Add((pos, row, lines[index++]));
             pos += part.Length + 1;
         }
         for (int m = 0; m < matches.Count; m++)
         {
             var match = matches[m];
             int end = match.Start + match.Length;
-            foreach (var (start, length, line) in spans)
+            foreach (var (start, row, line) in spans)
             {
-                int from = Math.Max(match.Start, start), to = Math.Min(end, start + length);
+                int from = Math.Max(match.Start, start), to = Math.Min(end, start + row.Length);
                 if (to <= from || line.IsHeading) continue;
-                double w = line.Right - line.Left;
-                boxes.Add(new MatchBox(line.Left + w * (from - start) / length, line.Top, line.Left + w * (to - start) / length, line.Bottom, m));
+                if (OcrSpans.IfMatching(line.Spans, row) is { } parts && GlyphRange(row, from - start, to - start) is var (g0, g1) && g1 > g0)
+                {
+                    // 一致した文字に重なる文字・単語の位置を合わせる
+                    double l = double.MaxValue, t = double.MaxValue, r = double.MinValue, b = double.MinValue;
+                    int g = 0;
+                    foreach (var part in parts)
+                    {
+                        int next = g + part.Glyphs;
+                        if (next > g0 && g < g1)
+                        {
+                            l = Math.Min(l, part.Left); t = Math.Min(t, part.Top);
+                            r = Math.Max(r, part.Right); b = Math.Max(b, part.Bottom);
+                        }
+                        g = next;
+                    }
+                    if (r > l && b > t)
+                    {
+                        boxes.Add(new MatchBox(l, t, r, b, m));
+                        continue;
+                    }
+                }
+                else if (GlyphRange(row, from - start, to - start) is var (h0, h1) && h1 <= h0)
+                    continue; // 空白だけに一致
+                boxes.Add(new MatchBox(line.Left, line.Top, line.Right, line.Bottom, m)); // 位置が分からない: 行全体
             }
         }
         return boxes;
+    }
+
+    /// <summary>行の中の文字の範囲 [from, to) を、空白を除いた文字の番号の範囲にする。</summary>
+    private static (int, int) GlyphRange(string row, int from, int to)
+    {
+        int g = 0, g0 = -1, g1 = 0;
+        for (int i = 0; i < row.Length; i++)
+        {
+            bool pair = char.IsHighSurrogate(row[i]) && i + 1 < row.Length && char.IsLowSurrogate(row[i + 1]);
+            if (!char.IsWhiteSpace(row[i]))
+            {
+                if (i >= from && i < to)
+                {
+                    if (g0 < 0) g0 = g;
+                    g1 = g + 1;
+                }
+                g++;
+            }
+            if (pair) i++;
+        }
+        return g0 < 0 ? (0, 0) : (g0, g1);
     }
 }

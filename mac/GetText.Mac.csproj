@@ -16,7 +16,7 @@
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationIcon>..\Assets\app.ico</ApplicationIcon>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <!-- 実行ファイルに入れる情報 (コード署名の条件: 製品名と版を入れる) -->
     <Product>GetText</Product>
     <AssemblyTitle>GetText</AssemblyTitle>
@@ -40,6 +40,10 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
     <PackageReference Include="Avalonia.Headless" Version="11.3.22" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\sdk\GetText.Plugin.Abstractions\GetText.Plugin.Abstractions.csproj" />
   </ItemGroup>
 
   <!-- Windows 版と共有するファイル (OS に依存しないもの) -->
@@ -71,6 +75,11 @@
     <Compile Include="..\Commands.cs" Link="Shared\Commands.cs" />
     <Compile Include="..\OcrLayout.cs" Link="Shared\OcrLayout.cs" />
     <Compile Include="..\TextSearch.cs" Link="Shared\TextSearch.cs" />
+    <Compile Include="..\ModelCatalog.cs" Link="Shared\ModelCatalog.cs" />
+    <Compile Include="..\HostOcrService.cs" Link="Shared\HostOcrService.cs" />
+    <Compile Include="..\DeveloperApi.cs" Link="Shared\DeveloperApi.cs" />
+    <Compile Include="..\ProtectedContent.cs" Link="Shared\ProtectedContent.cs" />
+    <Compile Include="..\PluginHost\**\*.cs" Link="Shared\PluginHost\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- 文字起こし・翻訳・AI の文字認識の Python のスクリプト (Windows 版と同じもの) -->
