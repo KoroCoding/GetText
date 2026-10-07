@@ -1,0 +1,69 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:GetText"
+        x:Class="GetText.CommandPalette"
+        Title="GetText — コマンド" Width="580" SizeToContent="Height" CanResize="False"
+        SystemDecorations="None" ShowInTaskbar="False" WindowStartupLocation="Manual"
+        Background="Transparent" TransparencyLevelHint="Transparent">
+    <Window.Styles>
+        <Style Selector="ListBoxItem">
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+            <Setter Property="CornerRadius" Value="{StaticResource Gt.Radius.Button}"/>
+        </Style>
+        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Gt.AccentSubtle}"/>
+        </Style>
+    </Window.Styles>
+    <Border Background="{DynamicResource Gt.Surface}" BorderBrush="{DynamicResource Gt.Border}" BorderThickness="1"
+            CornerRadius="{StaticResource Gt.Radius.Dialog}" Margin="12" BoxShadow="0 8 24 0 #38000000">
+        <DockPanel>
+            <DockPanel DockPanel.Dock="Top" Margin="16,12,12,12">
+                <Border DockPanel.Dock="Right" Background="{DynamicResource Gt.SurfaceSecondary}" BorderBrush="{DynamicResource Gt.Border}" BorderThickness="1"
+                        CornerRadius="{StaticResource Gt.Radius.Small}" Padding="6,0" VerticalAlignment="Center" Margin="8,0,0,0">
+                    <TextBlock Text="esc" FontSize="{StaticResource Gt.Font.Caption}" Foreground="{DynamicResource Gt.TextSecondary}"/>
+                </Border>
+                <local:GtIcon Icon="Search" Foreground="{DynamicResource Gt.TextSecondary}" Margin="0,0,12,0"/>
+                <TextBox x:Name="QueryBox" BorderThickness="0" Background="Transparent" Padding="0,4"
+                         Watermark="機能・操作・設定を検索 (例: 録画、検索、テーマ)" AutomationProperties.Name="コマンド・機能・設定を検索"/>
+            </DockPanel>
+            <Rectangle DockPanel.Dock="Top" Height="1" Fill="{DynamicResource Gt.Divider}"/>
+            <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Gt.Divider}" BorderThickness="0,1,0,0" Padding="16,8">
+                <DockPanel>
+                    <TextBlock x:Name="CountText" DockPanel.Dock="Right" Classes="caption"/>
+                    <TextBlock Classes="caption" Text="↑↓ で選ぶ ・ return で実行 ・ esc で閉じる"/>
+                </DockPanel>
+            </Border>
+            <Grid>
+                <ListBox x:Name="Results" MaxHeight="380" Margin="8,8,8,6" Background="Transparent" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="コマンドの候補">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="local:PaletteItem">
+                            <Grid ColumnDefinitions="28,*,Auto">
+                                <local:GtIcon Icon="{Binding Icon}" Svg="{Binding Svg}" Foreground="{DynamicResource Gt.TextSecondary}" HorizontalAlignment="Left"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0,8,0">
+                                    <TextBlock Text="{Binding Title}" Foreground="{DynamicResource Gt.TextPrimary}" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Subtitle}" Margin="12,0,0,0" FontSize="{StaticResource Gt.Font.Caption}"
+                                               Foreground="{DynamicResource Gt.TextSecondary}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Border Background="{DynamicResource Gt.SurfaceSecondary}" BorderBrush="{DynamicResource Gt.Border}" BorderThickness="1"
+                                            CornerRadius="{StaticResource Gt.Radius.Small}" Padding="6,0" Margin="0,0,8,0" IsVisible="{Binding HasShortcut}">
+                                        <TextBlock Text="{Binding Shortcut}" FontSize="{StaticResource Gt.Font.Caption}" Foreground="{DynamicResource Gt.TextSecondary}"/>
+                                    </Border>
+                                    <TextBlock Text="{Binding Category}" FontSize="{StaticResource Gt.Font.Caption}" Foreground="{DynamicResource Gt.TextTertiary}"
+                                               MinWidth="48" TextAlignment="Right"/>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <StackPanel x:Name="EmptyState" Margin="24,28" IsVisible="False" HorizontalAlignment="Center">
+                    <local:GtIcon Icon="Search" Width="24" Height="24" Foreground="{DynamicResource Gt.TextTertiary}" HorizontalAlignment="Center"/>
+                    <TextBlock Text="見つかりませんでした" Margin="0,8,0,0" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{DynamicResource Gt.TextPrimary}"/>
+                    <TextBlock Classes="caption" Text="別の言葉 (英語の名前でも) で探してください" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Grid>
+        </DockPanel>
+    </Border>
+</Window>

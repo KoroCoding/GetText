@@ -24,7 +24,11 @@ public partial class App : Application
     /// <summary>機能を選ぶ画面 (普通に起動したとき。動作確認や見本の画面を作るときは null)。</summary>
     internal static HomeWindow? Home { get; private set; }
 
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+    public override void Initialize()
+    {
+        AvaloniaXamlLoader.Load(this);
+        MacTheme.Apply(this); // 色・字体のデザイントークン (DesignTokens の Mac の値)
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {
@@ -132,7 +136,7 @@ public partial class App : Application
     private void BuildMenu(TextWindow text)
     {
         var settings = new NativeMenuItem("設定…") { Gesture = new Avalonia.Input.KeyGesture(Avalonia.Input.Key.OemComma, Avalonia.Input.KeyModifiers.Meta) };
-        settings.Click += (_, _) => text.OpenSettings();
+        settings.Click += (_, _) => text.OpenSettings(SettingsPage.Appearance);
         var minutes = new NativeMenuItem("議事録を開く") { Gesture = new Avalonia.Input.KeyGesture(Avalonia.Input.Key.M, Avalonia.Input.KeyModifiers.Meta | Avalonia.Input.KeyModifiers.Shift) };
         minutes.Click += (_, _) => text.OpenMinutes();
         var ocr = new NativeMenuItem("文字の読み取りを開く");
@@ -146,7 +150,10 @@ public partial class App : Application
             Home.WindowState = Avalonia.Controls.WindowState.Normal;
             Home.Activate();
         };
+        var palette = new NativeMenuItem("コマンドの一覧…") { Gesture = new Avalonia.Input.KeyGesture(Avalonia.Input.Key.K, Avalonia.Input.KeyModifiers.Meta) };
+        palette.Click += (_, _) => AppCommands.TogglePalette(Home, CommandContext.Any);
         var menu = new NativeMenu();
+        menu.Items.Add(palette);
         menu.Items.Add(settings);
         menu.Items.Add(home);
         menu.Items.Add(ocr);

@@ -66,6 +66,11 @@
     <Compile Include="..\LocalTranslator.cs" Link="Shared\LocalTranslator.cs" />
     <Compile Include="..\AiOcr.cs" Link="Shared\AiOcr.cs" />
     <Compile Include="..\MinutesSelfTest.cs" Link="Shared\MinutesSelfTest.cs" />
+    <Compile Include="..\DesignTokens.cs" Link="Shared\DesignTokens.cs" />
+    <Compile Include="..\AppIcons.cs" Link="Shared\AppIcons.cs" />
+    <Compile Include="..\Commands.cs" Link="Shared\Commands.cs" />
+    <Compile Include="..\OcrLayout.cs" Link="Shared\OcrLayout.cs" />
+    <Compile Include="..\TextSearch.cs" Link="Shared\TextSearch.cs" />
   </ItemGroup>
 
   <!-- 文字起こし・翻訳・AI の文字認識の Python のスクリプト (Windows 版と同じもの) -->

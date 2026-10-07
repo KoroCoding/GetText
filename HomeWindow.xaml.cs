@@ -1,10 +1,45 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Input;
+using System.Windows.Media;
 
 namespace GetText;
 
+/// <summary>ホームの機能のタイル (FeatureInfo から作る表示用のもの)。</summary>
+public sealed class FeatureTile(FeatureInfo info) : INotifyPropertyChanged
+{
+    public FeatureInfo Info { get; } = info;
+    public string Name => Info.Name;
+    public string Description => Info.Description;
+    public string Glyph => WindowsIcons.Glyph(Info.Icon.Semantic);
+
+    private FeatureStatus _status = FeatureStatus.Closed;
+    private bool _installed = true;
+
+    public bool HasStatus => !_installed || _status.State != FeatureState.Closed;
+    public bool CanClose => _installed && _status.State != FeatureState.Closed && Info.Close != null;
+    public string StatusLabel => !_installed ? $"追加する{(Info.DownloadSize is { } size ? " ・ " + size : "")}" : _status.Label ?? "";
+    public string StatusGlyph => WindowsIcons.Glyph(!_installed ? AppIcon.Download : _status.State == FeatureState.Active ? AppIcon.Recording : AppIcon.Success);
+    public Brush StatusForeground => Theme.Brush(p => !_installed ? p.AccentText : _status.State == FeatureState.Active ? p.Critical : p.Success);
+    public Brush PillBackground => Theme.Brush(p => !_installed ? p.AccentSubtle : _status.State == FeatureState.Active ? p.CriticalSubtle : p.SuccessSubtle);
+    public string CloseLabel => $"{Name}を閉じる";
+    public string AccessibleName => !_installed ? $"{Name}: {StatusLabel}" : HasStatus ? $"{Name}: {StatusLabel}。押すと前に出します" : $"{Name}を開く";
+    public string ToolTip => !_installed ? $"{Description}\nセットアップで入れると使えます" : Description;
+    public bool Installed => _installed;
+
+    public void Refresh()
+    {
+        _installed = Info.IsInstalled();
+        _status = _installed ? Info.Status() : FeatureStatus.Closed;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(null));
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+}
+
 /// <summary>
-/// 起動したときに出す、機能を選ぶ画面 (文字の読み取り・議事録・画面の録画)。開いている機能の切り替えと、GetText の終了もここで行う。
+/// 起動したときに出すホーム (GetText Hub): 機能のタイル (開く・状態・閉じる)、検索 (コマンドの一覧)、最近の議事録、設定・終了。
+/// 機能は AppCommands.Features から描く (拡張機能が増えてもタイルが並ぶだけで、画面の作りは変わらない)。
 /// 機能を開くと最小化し (設定で変えられる)、機能をすべて閉じると戻る。
 /// </summary>
 public partial class HomeWindow : Window
@@ -14,6 +49,7 @@ public partial class HomeWindow : Window
     private RecorderWindow? _recorder;
     private bool _exiting;
     private bool _anyOpen;
+    private readonly List<FeatureTile> _tiles = [];
 
     public HomeWindow(TextWindow text, AppSettings settings)
     {
@@ -21,6 +57,10 @@ public partial class HomeWindow : Window
         _text = text;
         _settings = settings;
         MinimizeCheck.IsChecked = settings.HomeMinimizeOnOpen;
+        AppCommands.RegisterBuiltIns(this, text, settings);
+        AppCommands.SetHost(text);
+        foreach (var feature in AppCommands.Features) _tiles.Add(new FeatureTile(feature));
+        FeatureList.ItemsSource = _tiles;
         text.FeaturesChanged += () => Dispatcher.BeginInvoke(UpdateCards);
         // 読み取りの画面 (アプリの中心) が閉じたら GetText を終える (終了の確認と保存は読み取りの画面が行う)
         text.Closed += (_, _) =>
@@ -30,20 +70,48 @@ public partial class HomeWindow : Window
             Application.Current.Shutdown();
         };
         Closing += OnClosing;
-        Loaded += (_, _) => { if (!_demo) UpdateCards(); };
+        PreviewKeyDown += (_, e) =>
+        {
+            if (AppCommands.HandleKey(this, e, CommandContext.Home)) return;
+            if (e.Key == Key.OemComma && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                _text.OpenSettings(SettingsPage.Appearance, this);
+                e.Handled = true;
+            }
+        };
+        Theme.Changed += UpdateCards;
+        Closed += (_, _) => Theme.Changed -= UpdateCards;
+        Loaded += (_, _) => { if (!_demo) { UpdateCards(); LoadRecent(); } };
+        Activated += (_, _) => { if (!_demo) { UpdateCards(); LoadRecent(); } }; // 議事録を保存した・セットアップから戻ったとき
     }
 
     private bool _demo;
 
-    /// <summary>見本の画面 (操作手順の画像用): 開いている機能の印を出す (minutes / record は印の文字、null なら閉じている)。</summary>
-    internal void ShowDemo(bool ocr, string? minutes, string? record)
+    /// <summary>見本の画面 (操作手順の画像用): 開いている機能の印と最近の議事録を出す (minutes / record は印の文字、null なら閉じている)。</summary>
+    internal void ShowDemo(bool ocr, string? minutes, string? record, IReadOnlyList<string>? recent = null, bool minutesInstalled = true)
     {
         _demo = true;
-        SetCard(ocr, OcrOpen, OcrClose, OcrChip);
-        SetCard(minutes != null, MinutesOpen, MinutesClose, MinutesChip);
-        SetCard(record != null, RecordOpen, RecordClose, RecordChip);
-        MinutesChipText.Text = minutes ?? "";
-        RecordChipText.Text = record ?? "";
+        var states = new Dictionary<string, FeatureStatus>
+        {
+            ["ocr"] = ocr ? new FeatureStatus(FeatureState.Open, "開いています") : FeatureStatus.Closed,
+            ["minutes"] = minutes == null ? FeatureStatus.Closed : new FeatureStatus(minutes == "記録中" ? FeatureState.Active : FeatureState.Open, minutes),
+            ["record"] = record == null ? FeatureStatus.Closed : new FeatureStatus(record == "録画中" ? FeatureState.Active : FeatureState.Open, record),
+        };
+        _tiles.Clear();
+        foreach (var f in AppCommands.Features)
+        {
+            var status = states.GetValueOrDefault(f.Id, FeatureStatus.Closed);
+            bool installed = f.Id != "minutes" || minutesInstalled;
+            _tiles.Add(new FeatureTile(new FeatureInfo
+            {
+                Id = f.Id, Name = f.Name, Description = f.Description, Icon = f.Icon, DownloadSize = f.DownloadSize,
+                IsInstalled = () => installed, Status = () => status, Open = () => { }, Close = f.Close, Install = f.Install,
+            }));
+        }
+        FeatureList.ItemsSource = null;
+        FeatureList.ItemsSource = _tiles;
+        foreach (var tile in _tiles) tile.Refresh();
+        ShowRecent((recent ?? []).Select(label => new RecentItem(label, label)).ToList());
     }
 
     /// <summary>画面の録画 (開いていなければ null)。</summary>
@@ -51,26 +119,18 @@ public partial class HomeWindow : Window
 
     // ───────── 機能を開く・閉じる ─────────
 
-    private void OcrOpen_Click(object sender, RoutedEventArgs e)
+    private void Tile_Click(object sender, RoutedEventArgs e)
     {
-        _text.OpenOcr();
-        AfterOpen();
+        if ((sender as FrameworkElement)?.DataContext is not FeatureTile tile || _demo) return;
+        if (tile.Installed) tile.Info.Open();
+        else tile.Info.Install?.Invoke();
+        UpdateCards();
     }
 
-    private void OcrClose_Click(object sender, RoutedEventArgs e) => _text.CloseOcr();
-
-    private void MinutesOpen_Click(object sender, RoutedEventArgs e)
+    private void TileClose_Click(object sender, RoutedEventArgs e)
     {
-        _text.OpenMinutes();
-        AfterOpen();
-    }
-
-    private void MinutesClose_Click(object sender, RoutedEventArgs e) => _text.Minutes?.Close();
-
-    private void RecordOpen_Click(object sender, RoutedEventArgs e)
-    {
-        OpenRecorder();
-        AfterOpen();
+        if ((sender as FrameworkElement)?.DataContext is FeatureTile tile && !_demo) tile.Info.Close?.Invoke();
+        UpdateCards();
     }
 
     /// <summary>画面の録画を開く (開いていれば前に出す)。</summary>
@@ -94,12 +154,19 @@ public partial class HomeWindow : Window
         return _recorder;
     }
 
-    private void RecordClose_Click(object sender, RoutedEventArgs e) => _recorder?.Close();
-
-    private void AfterOpen()
+    /// <summary>機能を開いた後 (設定によってはホームをしまう)。</summary>
+    internal void AfterFeatureOpened()
     {
         UpdateCards();
-        if (_settings.HomeMinimizeOnOpen) WindowState = WindowState.Minimized;
+        if (_settings.HomeMinimizeOnOpen && !_demo) WindowState = WindowState.Minimized;
+    }
+
+    /// <summary>ホームを前に出す。</summary>
+    internal void ShowHome()
+    {
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        Show();
+        Activate();
     }
 
     private void MinimizeCheck_Click(object sender, RoutedEventArgs e)
@@ -108,19 +175,13 @@ public partial class HomeWindow : Window
         _settings.Save();
     }
 
-    /// <summary>開いている機能の表示を合わせる。機能をすべて閉じたら、この画面を戻す。</summary>
+    /// <summary>機能の状態の表示を合わせる。機能をすべて閉じたら、この画面を戻す。</summary>
     private void UpdateCards()
     {
         if (_exiting) return;
-        bool ocr = _text.IsOcrOpen;
-        bool minutes = _text.Minutes is { IsLoaded: true };
-        bool record = _recorder is { IsLoaded: true };
-        SetCard(ocr, OcrOpen, OcrClose, OcrChip);
-        SetCard(minutes, MinutesOpen, MinutesClose, MinutesChip);
-        SetCard(record, RecordOpen, RecordClose, RecordChip);
-        MinutesChipText.Text = _text.Minutes?.IsBusy == true ? "記録中" : "開いています";
-        RecordChipText.Text = _recorder?.IsRecording == true ? "録画中" : "開いています";
-        bool any = ocr || minutes || record;
+        foreach (var tile in _tiles) tile.Refresh();
+        if (_demo) return;
+        bool any = _tiles.Any(t => t.HasStatus && t.Installed);
         if (_anyOpen && !any && WindowState == WindowState.Minimized)
         {
             WindowState = WindowState.Normal;
@@ -129,15 +190,48 @@ public partial class HomeWindow : Window
         _anyOpen = any;
     }
 
-    private static void SetCard(bool open, System.Windows.Controls.Button openButton, System.Windows.Controls.Button closeButton,
-        System.Windows.Controls.Border chip)
+    // ───────── 最近の議事録 ─────────
+
+    public sealed record RecentItem(string Path, string Label);
+
+    private void LoadRecent()
     {
-        openButton.Content = open ? "前に出す" : "開く";
-        closeButton.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        chip.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        try
+        {
+            ShowRecent(RecentMinutes.List(MinutesWindow.RecentFolder, 4).Select(r => new RecentItem(r.Path, r.Label)).ToList());
+        }
+        catch (Exception ex)
+        {
+            App.Log("RecentMinutes", ex);
+            ShowRecent([]);
+        }
     }
 
-    private void Settings_Click(object sender, RoutedEventArgs e) => _text.OpenSettings(0, this);
+    private void ShowRecent(List<RecentItem> items)
+    {
+        RecentList.ItemsSource = items;
+        RecentList.Visibility = items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        RecentEmpty.Visibility = items.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void Recent_Click(object sender, RoutedEventArgs e)
+    {
+        if (_demo || (sender as FrameworkElement)?.Tag is not string path) return;
+        _text.OpenMinutes().OpenRecent(path);
+        AfterFeatureOpened();
+    }
+
+    private void RecentEmptyOpen_Click(object sender, RoutedEventArgs e)
+    {
+        if (_demo) return;
+        var feature = AppCommands.Features.First(f => f.Id == "minutes");
+        if (feature.IsInstalled()) feature.Open();
+        else feature.Install?.Invoke();
+    }
+
+    private void Search_Click(object sender, RoutedEventArgs e) => AppCommands.TogglePalette(this, CommandContext.Home);
+
+    private void Settings_Click(object sender, RoutedEventArgs e) => _text.OpenSettings(SettingsPage.Appearance, this);
 
     // ───────── 終了 ─────────
 

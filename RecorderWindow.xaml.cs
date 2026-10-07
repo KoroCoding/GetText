@@ -13,6 +13,11 @@ namespace GetText;
 public sealed record RecordTarget(IntPtr Handle, bool IsMonitor, int ProcessId, string Name, string Label, bool IsPlaying = false)
 {
     public override string ToString() => Label;
+
+    /// <summary>一覧の左のアイコン (画面全体 / 音を出しているアプリ)。絵文字ではなく決まったアイコンで示す。</summary>
+    public string Glyph => WindowsIcons.Glyph(IsMonitor ? AppIcon.Monitor : IsPlaying ? AppIcon.Volume : AppIcon.None);
+
+    public string AccessibleName => (IsPlaying ? "音を出している: " : "") + Label;
 }
 
 /// <summary>
@@ -51,6 +56,7 @@ public partial class RecorderWindow : Window
         FolderText.Text = Folder;
         PreviewCheck.IsChecked = settings.RecordPreview;
         _clock.Tick += (_, _) => UpdateClock();
+        PreviewKeyDown += (_, e) => AppCommands.HandleKey(this, e, CommandContext.Recording); // Ctrl+K: コマンドの一覧
         _previewTimer.Tick += (_, _) => UpdatePreview();
         Closing += OnClosing;
         Closed += (_, _) =>
@@ -85,9 +91,9 @@ public partial class RecorderWindow : Window
     {
         TargetBox.ItemsSource = new List<RecordTarget>
         {
-            new(IntPtr.Zero, false, 1, "定例ミーティング", "🔊 定例ミーティング  —  Zoom", true),
-            new(IntPtr.Zero, false, 2, "チーム会議", "　 チーム会議  —  ms-teams"),
-            new(IntPtr.Zero, true, 0, "画面全体1", "🖥 画面全体 1 (メイン)  —  2560×1440・GetText 以外のすべての音"),
+            new(IntPtr.Zero, false, 1, "定例ミーティング", "定例ミーティング  —  Zoom", true),
+            new(IntPtr.Zero, false, 2, "チーム会議", "チーム会議  —  ms-teams"),
+            new(IntPtr.Zero, true, 0, "画面全体1", "画面全体 1 (メイン)  —  2560×1440・GetText 以外のすべての音"),
         };
         TargetBox.SelectedIndex = 0;
         // 見本の画面には、この PC の利用者名の入った場所を出さない
@@ -114,7 +120,7 @@ public partial class RecorderWindow : Window
         if (recording)
         {
             TargetBox.IsEnabled = AudioCheck.IsEnabled = MicCheck.IsEnabled = QualityBox.IsEnabled = FpsBox.IsEnabled = false;
-            RecordIcon.Text = "";
+            RecordIcon.Text = WindowsIcons.Glyph(AppIcon.Stop);
             RecordLabel.Text = "録画を停止";
             RecDot.Visibility = Visibility.Visible;
             ElapsedText.Text = "00:12:34";
@@ -137,7 +143,7 @@ public partial class RecorderWindow : Window
         {
             foreach (var w in WindowList.GetEachWindow())
                 list.Add(new RecordTarget(w.Handle, false, w.ProcessId, w.Title,
-                    $"{(w.IsPlaying ? "🔊 " : "　 ")}{w.Title}  —  {w.ProcessName}", w.IsPlaying));
+                    $"{w.Title}  —  {w.ProcessName}", w.IsPlaying));
         }
         catch (Exception ex)
         {
@@ -146,7 +152,7 @@ public partial class RecorderWindow : Window
         int number = 1;
         foreach (var (monitor, primary, width, height) in Monitors())
             list.Add(new RecordTarget(monitor, true, 0, $"画面全体{number}",
-                $"🖥 画面全体 {number++}{(primary ? " (メイン)" : "")}  —  {width}×{height}・GetText 以外のすべての音"));
+                $"画面全体 {number++}{(primary ? " (メイン)" : "")}  —  {width}×{height}・GetText 以外のすべての音"));
         TargetBox.ItemsSource = list;
         TargetBox.SelectedItem = list.FirstOrDefault(t => previous != null && t.Handle == previous.Handle) ?? list.FirstOrDefault();
         if (list.Count == 0) StatusText.Text = "録画できるウィンドウが見つかりません";
@@ -171,7 +177,7 @@ public partial class RecorderWindow : Window
         if (target != null && RefreshRate(target.Handle, target.IsMonitor) is int hz && fps > hz + 1)
             notes.Add($"この画面は {hz}Hz なので、{fps} コマ/秒を選んでも {hz} コマ/秒より多くはなりません (同じ画面がくり返されます)。{fps}Hz 以上の画面に出して録画してください。");
         TargetWarning.Text = string.Join("\n", notes);
-        TargetWarning.Visibility = notes.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        TargetWarningBar.Visibility = notes.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void Option_Click(object sender, RoutedEventArgs e) => SaveOptions();
@@ -215,6 +221,18 @@ public partial class RecorderWindow : Window
     }
 
     // ───────── 録画 ─────────
+
+    /// <summary>録画を始める / 止める (コマンドの一覧から。録画のボタンと同じ)。</summary>
+    internal void ToggleRecording()
+    {
+        if (RecordButton.IsEnabled) Record_Click(RecordButton, new RoutedEventArgs());
+    }
+
+    /// <summary>設定で保存先を変えたとき、表示を合わせる。</summary>
+    internal void ReloadFolder() => FolderText.Text = Folder;
+
+    /// <summary>保存先のフォルダを開く (コマンドの一覧から)。</summary>
+    internal void OpenFolder() => OpenFolder_Click(this, new RoutedEventArgs());
 
     private async void Record_Click(object sender, RoutedEventArgs e)
     {
@@ -454,7 +472,7 @@ public partial class RecorderWindow : Window
     private void SetRecordingUi(bool recording)
     {
         TargetBox.IsEnabled = AudioCheck.IsEnabled = MicCheck.IsEnabled = QualityBox.IsEnabled = FpsBox.IsEnabled = !recording;
-        RecordIcon.Text = recording ? "" : ""; // 停止 / 録画
+        RecordIcon.Text = recording ? WindowsIcons.Glyph(AppIcon.Stop) : "\uE7C8"; // 停止 / 録画 (丸)
         RecordLabel.Text = recording ? "録画を停止" : "録画を開始";
         RecDot.Visibility = recording ? Visibility.Visible : Visibility.Collapsed;
         if (recording)

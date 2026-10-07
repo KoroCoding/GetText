@@ -36,6 +36,34 @@ jobs:
       - name: 単体テスト
         run: dotnet test tests/GetText.Tests --nologo -v q
 
+      # 画面の画像 (ライト / ダーク・拡大率・状態ごと) と画面の操作の確認。結果は成果物 GetText-windows-screens に置く
+      - name: 画面の画像と操作の確認
+        id: screens
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          dotnet build GetText.csproj -c Release -o screens-build --nologo -v q
+          New-Item -ItemType Directory -Force screens | Out-Null
+          $ok = $true
+          foreach ($v in @(@('light'), @('dark'))) {
+            $p = Start-Process screens-build/GetText.exe -ArgumentList (@('--doc-snapshots', "screens/snapshots_$($v[0])") + $v) -PassThru -Wait -NoNewWindow `
+                 -RedirectStandardOutput "screens/snapshots_$($v[0]).out.txt" -RedirectStandardError "screens/snapshots_$($v[0]).err.txt"
+            if ($p.ExitCode -ne 0) { $ok = $false }
+          }
+          $p = Start-Process screens-build/GetText.exe -ArgumentList '--selftest-ui', 'screens/ui.txt' -PassThru -Wait -NoNewWindow `
+               -RedirectStandardOutput screens/ui.out.txt -RedirectStandardError screens/ui.err.txt
+          Get-Content screens/ui.txt, screens/ui.err.txt -ErrorAction SilentlyContinue | Select-Object -Last 40
+          if ($p.ExitCode -ne 0) { $ok = $false }
+          if (-not $ok) { exit 1 }
+
+      - name: 画面の画像を残す
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GetText-windows-screens
+          path: screens
+          if-no-files-found: ignore
+
       - name: 配布用のファイルを作る
         shell: powershell
         run: |

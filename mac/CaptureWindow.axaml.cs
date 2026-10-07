@@ -127,10 +127,53 @@ public partial class CaptureWindow : Window
         InnerFrame.BorderBrush = new SolidColorBrush(color);
         Grip.Fill = new SolidColorBrush(color);
         OuterFrame.BorderBrush = new SolidColorBrush(Color.FromArgb(0x55, color.R, color.G, color.B));
-        PauseButton.Content = paused ? "▶" : "❚❚";
+        CornerBL.Stroke = new SolidColorBrush(color);
+        PauseIcon.Icon = paused ? AppIcon.Play : AppIcon.Pause;
         ToolTip.SetTip(PauseButton, paused ? "再開" : "一時停止");
         TitleText.Text = paused ? "GetText (停止中)" : "GetText";
     }
+
+    /// <summary>
+    /// 検索で見つかった所の印を枠の中に描く (位置は読み取った画像のピクセル。pixelScale は 1 ポイントあたりのピクセル数)。
+    /// 今の一致 (active) は濃い色と太い枠・左の印で区別する。GetText の窓は画面の取り込みに写らないので、次の読み取りには入らない。
+    /// </summary>
+    public void SetHighlights(IReadOnlyList<MatchBox> boxes, int active, double pixelScale)
+    {
+        HighlightLayer.Children.Clear();
+        if (boxes.Count == 0 || pixelScale <= 0) return;
+        var p = MacTheme.Colors;
+        foreach (var box in boxes)
+        {
+            bool current = box.MatchIndex == active;
+            var rect = new Avalonia.Controls.Shapes.Rectangle
+            {
+                Width = Math.Max(4, (box.Right - box.Left) / pixelScale + 4),
+                Height = Math.Max(4, (box.Bottom - box.Top) / pixelScale + 4),
+                RadiusX = 3,
+                RadiusY = 3,
+                Fill = new SolidColorBrush(Color.FromUInt32(current ? p.SearchHighlightActive : p.SearchHighlight), current ? 0.45 : 0.3),
+                Stroke = new SolidColorBrush(Color.FromUInt32(current ? p.SearchHighlightActiveBorder : p.SearchHighlightBorder)),
+                StrokeThickness = current ? 3 : 1.5,
+            };
+            Canvas.SetLeft(rect, box.Left / pixelScale - 2);
+            Canvas.SetTop(rect, box.Top / pixelScale - 2);
+            HighlightLayer.Children.Add(rect);
+            if (current)
+            {
+                var mark = new Avalonia.Controls.Shapes.Rectangle
+                {
+                    Width = 4, Height = rect.Height, RadiusX = 2, RadiusY = 2,
+                    Fill = new SolidColorBrush(Color.FromUInt32(p.SearchHighlightActiveBorder)),
+                };
+                Canvas.SetLeft(mark, box.Left / pixelScale - 9);
+                Canvas.SetTop(mark, box.Top / pixelScale - 2);
+                HighlightLayer.Children.Add(mark);
+            }
+        }
+    }
+
+    /// <summary>描いている印の数 (動作確認用)。</summary>
+    internal int HighlightCount => HighlightLayer.Children.Count;
 
     private void UpdateSizeText()
     {

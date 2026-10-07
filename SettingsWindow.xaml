@@ -2,367 +2,630 @@
         Icon="/Assets/app.ico"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="GetText の設定" Width="720" Height="600" MinWidth="660" MinHeight="420"
+        xmlns:local="clr-namespace:GetText"
+        Title="GetText の設定" Width="900" Height="640" MinWidth="640" MinHeight="440"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
-        FontFamily="{StaticResource UiFont}" FontSize="13">
+        FontFamily="{StaticResource UiFont}" FontSize="{StaticResource Gt.Font.Body}">
     <Window.Resources>
         <Style x:Key="RowCombo" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
             <Setter Property="MinWidth" Value="200"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="Margin" Value="12,0,0,0"/>
+            <Setter Property="Margin" Value="16,0,0,0"/>
         </Style>
         <Style x:Key="RowCheck" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
             <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="Margin" Value="12,0,0,0"/>
+            <Setter Property="Margin" Value="16,0,0,0"/>
             <Setter Property="MinWidth" Value="0"/>
         </Style>
-        <Style x:Key="Page" TargetType="ScrollViewer" BasedOn="{StaticResource {x:Type ScrollViewer}}">
-            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
-            <Setter Property="Padding" Value="4,0,12,12"/>
+        <Style x:Key="RowAction" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="16,0,0,0"/>
+        </Style>
+        <Style x:Key="PageTitle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource Gt.Font.Display}"/>
+            <Setter Property="FontSize" Value="{StaticResource Gt.Font.Subtitle}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource Gt.TextPrimary}"/>
+        </Style>
+        <Style x:Key="NavGroup" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="{StaticResource Gt.Font.Caption}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Gt.TextSecondary}"/>
+            <Setter Property="Margin" Value="12,16,0,4"/>
+        </Style>
+        <!-- 左のメニューの項目: 選んでいるものは背景と左の印で示す (色だけに頼らない) -->
+        <Style x:Key="NavItem" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource Gt.TextPrimary}"/>
+            <Setter Property="GroupName" Value="SettingsNav"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource RoundFocusVisual}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid>
+                            <Border x:Name="Bg" Background="Transparent" CornerRadius="{StaticResource Gt.Radius.Button}"/>
+                            <Border x:Name="Mark" Width="3" CornerRadius="2" Margin="0,10" HorizontalAlignment="Left"
+                                    Background="{DynamicResource AccentFillColorDefaultBrush}" Visibility="Hidden"/>
+                            <ContentPresenter Margin="12,8"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource Gt.SubtleHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource Gt.SubtleHover}"/>
+                                <Setter TargetName="Mark" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="Page" TargetType="StackPanel">
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Setter Property="Margin" Value="0,0,0,24"/>
+        </Style>
+        <!-- 送る・送らないの印 (アイコン + 文字) -->
+        <Style x:Key="PlacePill" TargetType="Border">
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="Margin" Value="16,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
     </Window.Resources>
 
-    <!-- Windows 11 の設定アプリのように左に縦のメニューを並べる -->
-    <TabControl x:Name="Tabs" Margin="4,8,8,8" TabStripPlacement="Left"
-                Template="{StaticResource DefaultLeftTabControlStyle}">
-        <!-- ───────── 読み取り ───────── -->
-        <TabItem Header="読み取り">
-            <ScrollViewer Style="{StaticResource Page}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource SettingHeader}" Text="OCR エンジン"/>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <ComboBox x:Name="OcrEngineBox" DockPanel.Dock="Right" Style="{StaticResource RowCombo}"
-                                      MinWidth="250" SelectionChanged="OcrEngineBox_SelectionChanged"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="文字の読み取り方式"/>
-                                <TextBlock x:Name="OcrEngineDescription" Style="{StaticResource SettingDescription}"
-                                           Text="AI は記号・表・小さな文字まで正確に読めます (要セットアップ)。使えないときは自動で Windows 標準に切り替わります。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <ComboBox x:Name="IntervalBox" DockPanel.Dock="Right" Style="{StaticResource RowCombo}"
-                                      MinWidth="120" SelectionChanged="IntervalBox_SelectionChanged"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="読み取りの間隔"/>
-                                <TextBlock Style="{StaticResource SettingDescription}"
-                                           Text="画面に変化がないときは読み取りを省きます。動画など変わり続ける画面では、短いほど CPU を多く使います。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <CheckBox x:Name="JoinCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}"
-                                      Click="JoinCheck_Click"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="和文の文字間の空白を詰める"/>
-                                <TextBlock Style="{StaticResource SettingDescription}"
-                                           Text="「日 本 語」のように 1 文字ずつ空いてしまうのを「日本語」にします。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="240"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
 
-                    <Expander x:Name="WindowsOcrDetails" Header="Windows 標準 OCR の詳細 (言語・拡大・高精度モード)" Margin="0,14,0,0"
-                              HorizontalAlignment="Stretch" IsExpanded="False">
-                    <StackPanel Margin="0,6,0,0">
-                    <Border Style="{StaticResource SettingRow}">
+        <!-- 左: 検索とページ -->
+        <DockPanel Margin="12,16,8,12">
+            <Border DockPanel.Dock="Top" Background="{DynamicResource Gt.Surface}" BorderBrush="{DynamicResource Gt.Border}" BorderThickness="1"
+                    CornerRadius="{StaticResource Gt.Radius.Input}" Padding="12,4,4,4" Margin="0,0,0,8">
+                <DockPanel>
+                    <Button x:Name="SettingSearchClear" DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="{local:Icon Close}" FontSize="10"
+                            Visibility="Collapsed" Click="SettingSearchClear_Click" ToolTip="検索を消す" AutomationProperties.Name="検索を消す"/>
+                    <TextBlock Style="{StaticResource Icon}" Text="{local:Icon Search}" FontSize="14" Foreground="{DynamicResource Gt.TextSecondary}" Margin="0,0,8,0"/>
+                    <Grid>
+                        <TextBox x:Name="SettingSearch" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource Gt.TextPrimary}"
+                                 CaretBrush="{DynamicResource Gt.TextPrimary}" Padding="0,4" VerticalContentAlignment="Center"
+                                 TextChanged="SettingSearch_TextChanged" AutomationProperties.Name="設定を検索">
+                            <TextBox.Template>
+                                <ControlTemplate TargetType="TextBox">
+                                    <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
+                                </ControlTemplate>
+                            </TextBox.Template>
+                        </TextBox>
+                        <TextBlock x:Name="SettingSearchPlaceholder" Text="設定を検索" IsHitTestVisible="False" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Gt.TextTertiary}"/>
+                    </Grid>
+                </DockPanel>
+            </Border>
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="NavPanel" KeyboardNavigation.DirectionalNavigation="Cycle">
+                    <TextBlock Style="{StaticResource NavGroup}" Text="一般"/>
+                    <RadioButton x:Name="NavAppearance" Style="{StaticResource NavItem}" Tag="Appearance" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="{local:Icon Appearance}" Margin="0,0,12,0"/>
+                            <TextBlock Text="外観"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NavShortcuts" Style="{StaticResource NavItem}" Tag="Shortcuts" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="{local:Icon Keyboard}" Margin="0,0,12,0"/>
+                            <TextBlock Text="ショートカット"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NavPrivacy" Style="{StaticResource NavItem}" Tag="Privacy" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="{local:Icon Privacy}" Margin="0,0,12,0"/>
+                            <TextBlock Text="プライバシー"/>
+                        </StackPanel>
+                    </RadioButton>
+
+                    <TextBlock Style="{StaticResource NavGroup}" Text="機能"/>
+                    <RadioButton x:Name="NavScreenOcr" Style="{StaticResource NavItem}" Tag="ScreenOcr" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="{local:Icon ScreenOcr}" Margin="0,0,12,0"/>
+                            <TextBlock Text="文字の読み取り"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NavTranslation" Style="{StaticResource NavItem}" Tag="Translation" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="{local:Icon Translate}" Margin="0,0,12,0"/>
+                            <TextBlock Text="翻訳"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NavMeetings" Style="{StaticResource NavItem}" Tag="Meetings" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="{local:Icon Meeting}" Margin="0,0,12,0"/>
+                            <TextBlock Text="議事録"/>
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="NavRecording" Style="{StaticResource NavItem}" Tag="Recording" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="{local:Icon Recording}" Margin="0,0,12,0"/>
+                            <TextBlock Text="画面の録画"/>
+                        </StackPanel>
+                    </RadioButton>
+
+                    <TextBlock Style="{StaticResource NavGroup}" Text="拡張"/>
+                    <RadioButton x:Name="NavModels" Style="{StaticResource NavItem}" Tag="Models" Checked="Nav_Checked">
                         <DockPanel>
-                            <ComboBox x:Name="LanguageBox" DockPanel.Dock="Right" Style="{StaticResource RowCombo}"
-                                      MinWidth="160" SelectionChanged="LanguageBox_SelectionChanged"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="言語"/>
-                                <TextBlock Style="{StaticResource SettingDescription}"
-                                           Text="英語の OCR も入れると「自動」が選べます (Windows の設定 → 時刻と言語 → 言語と地域 → 英語を追加)。"/>
-                            </StackPanel>
+                            <!-- 入れていない機能があるときの印 (文字で示す) -->
+                            <Border x:Name="ModelsBadge" DockPanel.Dock="Right" Style="{StaticResource StatusPill}" Background="{DynamicResource Gt.AccentSubtle}"
+                                    Margin="8,0,0,0" Padding="6,0" Visibility="Collapsed">
+                                <TextBlock Text="未設定" FontSize="{StaticResource Gt.Font.Caption}" Foreground="{DynamicResource Gt.AccentText}"/>
+                            </Border>
+                            <TextBlock Style="{StaticResource Icon}" Text="{local:Icon Model}" Margin="0,0,12,0"/>
+                            <TextBlock Text="モデルとセットアップ"/>
                         </DockPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <ComboBox x:Name="ScaleBox" DockPanel.Dock="Right" Style="{StaticResource RowCombo}"
-                                      MinWidth="120" SelectionChanged="ScaleBox_SelectionChanged"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="拡大"/>
-                                <TextBlock Style="{StaticResource SettingDescription}"
-                                           Text="自動: 文字の大きさを測って最適な倍率で読み取ります。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <CheckBox x:Name="AccuracyCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}"
-                                      Click="AccuracyCheck_Click"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="高精度モード"/>
-                                <TextBlock Style="{StaticResource SettingDescription}"
-                                           Text="暗い背景の反転・高品質拡大・複数倍率での多数決・文脈補正を行います。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
+                    </RadioButton>
+
+                    <TextBlock Style="{StaticResource NavGroup}" Text="詳細"/>
+                    <RadioButton x:Name="NavDiagnostics" Style="{StaticResource NavItem}" Tag="Diagnostics" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="{local:Icon Diagnostics}" Margin="0,0,12,0"/>
+                            <TextBlock Text="診断"/>
+                        </StackPanel>
+                    </RadioButton>
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+
+        <!-- 右: ページ -->
+        <DockPanel Grid.Column="1">
+            <TextBlock x:Name="PageTitleText" DockPanel.Dock="Top" Style="{StaticResource PageTitle}" Margin="16,16,24,8" Text="外観"/>
+            <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" Padding="16,0,24,0">
+                <Grid x:Name="Pages">
+                    <!-- ───────── 検索の結果 ───────── -->
+                    <StackPanel x:Name="SearchResults" Style="{StaticResource Page}">
+                        <ItemsControl x:Name="SearchResultList" Focusable="False">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource RowButton}" Click="SearchResult_Click" Margin="0,0,0,2"
+                                            AutomationProperties.Name="{Binding Label}">
+                                        <DockPanel>
+                                            <TextBlock DockPanel.Dock="Right" Style="{StaticResource Icon}" Text="{local:Icon ChevronRight}" FontSize="12"
+                                                       Foreground="{DynamicResource Gt.TextTertiary}"/>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Gt.TextPrimary}" TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding Where}" Style="{StaticResource Caption}"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <StackPanel x:Name="SearchEmpty" Margin="0,24" Visibility="Collapsed">
+                            <TextBlock Text="見つかりませんでした" FontWeight="SemiBold" Foreground="{DynamicResource Gt.TextPrimary}"/>
+                            <TextBlock Style="{StaticResource Caption}" Text="別の言葉で探すか、左の一覧から選んでください。" Margin="0,4,0,0"/>
+                        </StackPanel>
                     </StackPanel>
-                    </Expander>
-                </StackPanel>
+
+                    <!-- ───────── 外観 ───────── -->
+                    <StackPanel Style="{StaticResource Page}" Tag="Appearance">
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <ComboBox x:Name="ThemeBox" DockPanel.Dock="Right" Style="{StaticResource RowCombo}" SelectionChanged="ThemeBox_SelectionChanged"
+                                          AutomationProperties.Name="テーマ"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="テーマ"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="ライト・ダーク、または Windows の設定に合わせます。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                                    <Slider x:Name="FontSlider" Width="160" Minimum="9" Maximum="40" SmallChange="1" LargeChange="2"
+                                            IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"
+                                            ValueChanged="FontSlider_ValueChanged" AutomationProperties.Name="読み取った文字の大きさ"/>
+                                    <TextBlock x:Name="FontValue" Width="48" TextAlignment="Right" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Gt.TextSecondary}"/>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="読み取った文字の大きさ"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="原文・日本語訳の欄の文字。欄の上で Ctrl+ホイールでも変えられます。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                                    <Slider x:Name="MinutesFontSlider" Width="160" Minimum="9" Maximum="40" SmallChange="1" LargeChange="2"
+                                            IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"
+                                            ValueChanged="MinutesFontSlider_ValueChanged" AutomationProperties.Name="議事録の文字の大きさ"/>
+                                    <TextBlock x:Name="MinutesFontValue" Width="48" TextAlignment="Right" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Gt.TextSecondary}"/>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="議事録の文字の大きさ"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="議事録の画面で Ctrl+ホイール、Ctrl と +・−・0 でも変えられます。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <TextBlock Style="{StaticResource SettingHeader}" Text="ホーム"/>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <CheckBox x:Name="HomeMinimizeCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="HomeMinimize_Click"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="機能を開いたらホームを最小化する"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="機能をすべて閉じると、ホームが戻ります。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- ───────── ショートカット ───────── -->
+                    <StackPanel x:Name="ShortcutList" Style="{StaticResource Page}" Tag="Shortcuts">
+                        <TextBlock Style="{StaticResource SettingHeader}" Text="どのアプリを使っていても効くキー" Margin="0,0,0,8"/>
+                        <TextBlock Style="{StaticResource SettingHeader}" Text="GetText の画面で使うキー" x:Name="LocalShortcutHeader"/>
+                    </StackPanel>
+
+                    <!-- ───────── プライバシー ───────── -->
+                    <StackPanel Style="{StaticResource Page}" Tag="Privacy">
+                        <TextBlock Style="{StaticResource SettingDescription}" Margin="0,0,0,12"
+                                   Text="GetText はアカウント不要で、使い方の情報 (テレメトリー) も送りません。インターネットに送るのは、下の「オンライン」の印があるものだけです。"/>
+                        <ItemsControl x:Name="PrivacyList" Focusable="False">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource SettingRow}">
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Style="{StaticResource RowAction}" Content="{Binding ActionLabel}" Tag="{Binding Page}"
+                                                    Click="PrivacyAction_Click" Visibility="{Binding ActionVisibility}"/>
+                                            <Border DockPanel.Dock="Right" Style="{StaticResource PlacePill}" Background="{Binding PillBackground}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Style="{StaticResource Icon}" FontSize="12" Text="{Binding PillGlyph}" Foreground="{Binding PillForeground}" Margin="0,0,6,0"/>
+                                                    <TextBlock Text="{Binding PillText}" FontSize="{StaticResource Gt.Font.Caption}" Foreground="{Binding PillForeground}"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <StackPanel>
+                                                <TextBlock Style="{StaticResource SettingLabel}" Text="{Binding Label}"/>
+                                                <TextBlock Style="{StaticResource SettingDescription}" Text="{Binding Description}"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- ───────── 文字の読み取り ───────── -->
+                    <StackPanel Style="{StaticResource Page}" Tag="ScreenOcr">
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <ComboBox x:Name="OcrEngineBox" DockPanel.Dock="Right" Style="{StaticResource RowCombo}"
+                                          MinWidth="260" SelectionChanged="OcrEngineBox_SelectionChanged" AutomationProperties.Name="文字の読み取り方式"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="読み取り方式"/>
+                                    <TextBlock x:Name="OcrEngineDescription" Style="{StaticResource SettingDescription}"
+                                               Text="AI は記号・表・小さな文字まで正確に読めます (要セットアップ)。使えないときは自動で Windows 標準に切り替わります。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <ComboBox x:Name="OcrViewBox" DockPanel.Dock="Right" Style="{StaticResource RowCombo}"
+                                          MinWidth="180" SelectionChanged="OcrViewBox_SelectionChanged" AutomationProperties.Name="並べ方"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="並べ方"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}"
+                                               Text="「枠・まとまりごと」は、名簿や表のように枠で区切られた文字を枠ごとに分けて【1】【2】… の見出しを付けます。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <ComboBox x:Name="LayoutBox" DockPanel.Dock="Right" Style="{StaticResource RowCombo}"
+                                          MinWidth="140" SelectionChanged="LayoutBox_SelectionChanged" AutomationProperties.Name="日本語訳の位置"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="日本語訳の位置"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="横長のウィンドウでは「右」が見やすくなります。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <CheckBox x:Name="TopmostCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="TopmostCheck_Click"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="常に手前に表示する"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="読み取りの画面の操作バーのピンでも切り替えられます。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <CheckBox x:Name="FollowCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="FollowCheck_Click"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="読み取り枠の右側について行く"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="枠を動かすと、読み取りの画面も枠の隣に移動します。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <CheckBox x:Name="WrapCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="WrapCheck_Click"/>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="長い行を折り返す" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Border>
+
+                        <!-- あまり変えない設定は「詳細設定」にたたんでおく -->
+                        <Expander x:Name="WindowsOcrDetails" Header="詳細設定" Margin="0,16,0,0" HorizontalAlignment="Stretch" IsExpanded="False">
+                            <StackPanel Margin="0,8,0,0">
+                                <Border Style="{StaticResource SettingRow}">
+                                    <DockPanel>
+                                        <ComboBox x:Name="IntervalBox" DockPanel.Dock="Right" Style="{StaticResource RowCombo}"
+                                                  MinWidth="120" SelectionChanged="IntervalBox_SelectionChanged" AutomationProperties.Name="読み取りの間隔"/>
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource SettingLabel}" Text="読み取りの間隔"/>
+                                            <TextBlock Style="{StaticResource SettingDescription}"
+                                                       Text="画面に変化がないときは読み取りを省きます。動画など変わり続ける画面では、短いほど CPU を多く使います。"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                                <Border Style="{StaticResource SettingRow}">
+                                    <DockPanel>
+                                        <CheckBox x:Name="JoinCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="JoinCheck_Click"/>
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource SettingLabel}" Text="和文の文字間の空白を詰める"/>
+                                            <TextBlock Style="{StaticResource SettingDescription}" Text="「日 本 語」のように 1 文字ずつ空いてしまうのを「日本語」にします。"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                                <Border Style="{StaticResource SettingRow}">
+                                    <DockPanel>
+                                        <ComboBox x:Name="ConvertBox" DockPanel.Dock="Right" Style="{StaticResource RowCombo}"
+                                                  MinWidth="160" SelectionChanged="ConvertBox_SelectionChanged" AutomationProperties.Name="文字変換"/>
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource SettingLabel}" Text="文字変換"/>
+                                            <TextBlock Style="{StaticResource SettingDescription}" Text="表示とコピーする文字を変換します。欄の右クリックメニューからも切り替えられます。"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                                <TextBlock Style="{StaticResource SettingHeader}" Text="Windows 標準 OCR"/>
+                                <Border Style="{StaticResource SettingRow}">
+                                    <DockPanel>
+                                        <ComboBox x:Name="LanguageBox" DockPanel.Dock="Right" Style="{StaticResource RowCombo}"
+                                                  MinWidth="160" SelectionChanged="LanguageBox_SelectionChanged" AutomationProperties.Name="言語"/>
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource SettingLabel}" Text="言語"/>
+                                            <TextBlock Style="{StaticResource SettingDescription}"
+                                                       Text="英語の OCR も入れると「自動」が選べます (Windows の設定 → 時刻と言語 → 言語と地域 → 英語を追加)。"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                                <Border Style="{StaticResource SettingRow}">
+                                    <DockPanel>
+                                        <ComboBox x:Name="ScaleBox" DockPanel.Dock="Right" Style="{StaticResource RowCombo}"
+                                                  MinWidth="120" SelectionChanged="ScaleBox_SelectionChanged" AutomationProperties.Name="拡大"/>
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource SettingLabel}" Text="拡大"/>
+                                            <TextBlock Style="{StaticResource SettingDescription}" Text="自動: 文字の大きさを測って最適な倍率で読み取ります。"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                                <Border Style="{StaticResource SettingRow}">
+                                    <DockPanel>
+                                        <CheckBox x:Name="AccuracyCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="AccuracyCheck_Click"/>
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource SettingLabel}" Text="高精度モード"/>
+                                            <TextBlock Style="{StaticResource SettingDescription}" Text="暗い背景の反転・高品質拡大・複数倍率での多数決・文脈補正を行います。"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                            </StackPanel>
+                        </Expander>
+                    </StackPanel>
+
+                    <!-- ───────── 翻訳 ───────── -->
+                    <StackPanel Style="{StaticResource Page}" Tag="Translation">
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <CheckBox x:Name="TranslateCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="TranslateCheck_Click"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="外国語の文を日本語に翻訳して表示する"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="日本語の行はそのまま表示し、外国語と判定した文だけを翻訳します。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <ComboBox x:Name="EngineBox" DockPanel.Dock="Right" Style="{StaticResource RowCombo}"
+                                          MinWidth="260" SelectionChanged="EngineBox_SelectionChanged" AutomationProperties.Name="翻訳エンジン"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="翻訳エンジン"/>
+                                    <TextBlock x:Name="EngineDescription" Style="{StaticResource SettingDescription}"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border x:Name="DeepLRow" Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource RowAction}" Content="キーを設定…" Click="KeyButton_Click"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="DeepL API キー"/>
+                                    <TextBlock x:Name="KeyStatus" Style="{StaticResource SettingDescription}"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- ───────── 議事録 ───────── -->
+                    <StackPanel Style="{StaticResource Page}" Tag="Meetings">
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <CheckBox x:Name="MinutesTimeCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="MinutesDisplay_Click"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="発言の時刻を表示する"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="コピー・保存にも含めます。議事録の画面の「表示」でも変えられます。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <CheckBox x:Name="MinutesTranslateCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="MinutesDisplay_Click"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="日本語以外の発言に日本語訳を付ける"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="英語などの発言の下に日本語訳を出します (PC の中で訳します)。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <CheckBox x:Name="MinutesFillerCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="MinutesDisplay_Click"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="相づちを除く"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="「はい」「えーと」などだけの発言を隠します (外すと戻ります)。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <CheckBox x:Name="MinutesScrollCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="MinutesDisplay_Click"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="自動スクロール"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="新しい発言が加わるたびに最新までスクロールします。書き直している間は止まります。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <CheckBox x:Name="MinutesVoicesCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="MinutesVoices_Click"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="名前を付けた話者の声を覚える"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}"
+                                               Text="次の会議から似た声の話者に自動で名前を付けます。覚えるのは声の特徴 (数値) だけで、音声は保存しません。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Expander Header="詳細設定" Margin="0,16,0,0" HorizontalAlignment="Stretch" IsExpanded="False">
+                            <Border Style="{StaticResource SettingRow}" Margin="0,8,0,0">
+                                <DockPanel>
+                                    <CheckBox x:Name="MinutesAiTranslateCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="MinutesAiTranslate_Click"/>
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource SettingLabel}" Text="日本語訳を AI で作る (前後の発言と用語を使う)"/>
+                                        <TextBlock Style="{StaticResource SettingDescription}"
+                                                   Text="文脈による補正と同じ AI (PC 内) が、直前の発言と登録した用語を見て訳します。製品名などの取り違えが減りますが、時間がかかります (GPU があると速い)。"/>
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+                        </Expander>
+                    </StackPanel>
+
+                    <!-- ───────── 画面の録画 ───────── -->
+                    <StackPanel Style="{StaticResource Page}" Tag="Recording">
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Style="{StaticResource RowAction}" Content="変更…" Click="RecordFolderChange_Click"/>
+                                    <Button Style="{StaticResource RowAction}" Content="開く" Margin="8,0,0,0" Click="RecordFolderOpen_Click"/>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="保存先"/>
+                                    <TextBlock x:Name="RecordFolderText" Style="{StaticResource SettingDescription}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource RowAction}" Content="録画の画面を開く" Click="OpenRecorder_Click"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="画質・なめらかさ・音"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="録画の画面で、録画するものを見ながら選びます (次の録画にも使います)。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- ───────── モデルとセットアップ ───────── -->
+                    <StackPanel Style="{StaticResource Page}" Tag="Models">
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <Button x:Name="SetupButton" DockPanel.Dock="Right" Content="セットアップを実行" Margin="16,0,0,0" VerticalAlignment="Center"
+                                        Style="{StaticResource AccentButtonStyle}" Click="Setup_Click"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="AI の機能のセットアップ"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}"
+                                               Text="入れる範囲 (フル 約 8 GB・標準 約 4 GB・最小 約 1 GB) を、この PC に合うおすすめ付きで選べます。取得済みの分は省きます。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <TextBlock Style="{StaticResource SettingHeader}" Text="入っているモデル"/>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <Border x:Name="AiOcrPill" DockPanel.Dock="Right" Style="{StaticResource PlacePill}">
+                                    <TextBlock x:Name="AiOcrPillText" FontSize="{StaticResource Gt.Font.Caption}"/>
+                                </Border>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="AI OCR"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="RapidOCR + PP-OCRv6 (Apache-2.0) ・ PC 内で動きます"/>
+                                    <TextBlock x:Name="AiOcrStatus" Style="{StaticResource SettingDescription}"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <Border x:Name="TranslationPill" DockPanel.Dock="Right" Style="{StaticResource PlacePill}">
+                                    <TextBlock x:Name="TranslationPillText" FontSize="{StaticResource Gt.Font.Caption}"/>
+                                </Border>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="ローカル翻訳"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}"
+                                               Text="CTranslate2 ・ 英語: FuguMT (CC BY-SA 4.0) ・ その他の言語: NLLB-200 1.3B (CC BY-NC 4.0・非商用。選んだときだけ)"/>
+                                    <TextBlock x:Name="LocalTranslationStatus" Style="{StaticResource SettingDescription}"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <Border x:Name="MinutesPill" DockPanel.Dock="Right" Style="{StaticResource PlacePill}">
+                                    <TextBlock x:Name="MinutesPillText" FontSize="{StaticResource Gt.Font.Caption}"/>
+                                </Border>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="議事録 (音声の文字起こし)"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}"
+                                               Text="音声認識: ReazonSpeech k2 v2・kotoba-whisper v2.0・Whisper large-v3 turbo ・ 話者: 3D-Speaker CAM++ ・ 無音検出: Silero VAD ・ 文脈補正: Qwen3-4B-Instruct-2507 (いずれも Apache-2.0 / MIT)"/>
+                                    <TextBlock x:Name="MinutesStatus" Style="{StaticResource SettingDescription}"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- ───────── 診断 ───────── -->
+                    <StackPanel Style="{StaticResource Page}" Tag="Diagnostics">
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource RowAction}" Content="開く" Click="OpenLogFolder_Click"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="ログのフォルダ"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="うまく動かないときの記録 (error.log) があります。PC の外には送りません。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource RowAction}" Content="開く" Click="OpenSettingsFolder_Click"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="設定のフォルダ"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="settings.json (この画面の設定) があります。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource RowAction}" Content="開く" Click="OpenModelFolder_Click"/>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="モデルのフォルダ"/>
+                                    <TextBlock Style="{StaticResource SettingDescription}" Text="AI の機能の Python とモデルがあります。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <TextBlock x:Name="VersionText" Style="{StaticResource SettingDescription}" Margin="4,16,0,0"/>
+                    </StackPanel>
+                </Grid>
             </ScrollViewer>
-        </TabItem>
-
-        <!-- ───────── 翻訳 ───────── -->
-        <TabItem Header="翻訳">
-            <ScrollViewer Style="{StaticResource Page}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource SettingHeader}" Text="日本語訳"/>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <CheckBox x:Name="TranslateCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}"
-                                      Click="TranslateCheck_Click"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="外国語の文を日本語に翻訳して表示する"/>
-                                <TextBlock Style="{StaticResource SettingDescription}"
-                                           Text="日本語の行はそのまま表示し、外国語と判定した文だけを翻訳します。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <ComboBox x:Name="EngineBox" DockPanel.Dock="Right" Style="{StaticResource RowCombo}"
-                                      MinWidth="250" SelectionChanged="EngineBox_SelectionChanged"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="翻訳エンジン"/>
-                                <TextBlock x:Name="EngineDescription" Style="{StaticResource SettingDescription}"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border x:Name="DeepLRow" Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <Button DockPanel.Dock="Right" Content="キーを設定…" Margin="12,0,0,0" VerticalAlignment="Center"
-                                    Click="KeyButton_Click"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="DeepL API キー"/>
-                                <TextBlock x:Name="KeyStatus" Style="{StaticResource SettingDescription}"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
-        </TabItem>
-
-        <!-- ───────── 表示 ───────── -->
-        <TabItem Header="表示">
-            <ScrollViewer Style="{StaticResource Page}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource SettingHeader}" Text="見た目"/>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <ComboBox x:Name="ThemeBox" DockPanel.Dock="Right" Style="{StaticResource RowCombo}"
-                                      SelectionChanged="ThemeBox_SelectionChanged"/>
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="テーマ" VerticalAlignment="Center"/>
-                        </DockPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <ComboBox x:Name="LayoutBox" DockPanel.Dock="Right" Style="{StaticResource RowCombo}"
-                                      MinWidth="140" SelectionChanged="LayoutBox_SelectionChanged"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="日本語訳の位置"/>
-                                <TextBlock Style="{StaticResource SettingDescription}" Text="横長のウィンドウでは「右」が見やすくなります。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
-                                <Slider x:Name="FontSlider" Width="160" Minimum="9" Maximum="40" SmallChange="1" LargeChange="2"
-                                        IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"
-                                        ValueChanged="FontSlider_ValueChanged"/>
-                                <TextBlock x:Name="FontValue" Width="40" TextAlignment="Right" VerticalAlignment="Center"
-                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                            </StackPanel>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="読み取った文字の大きさ"/>
-                                <TextBlock Style="{StaticResource SettingDescription}" Text="原文・日本語訳の欄の文字です。欄の上で Ctrl+ホイールでも変えられます。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <CheckBox x:Name="WrapCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="WrapCheck_Click"/>
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="長い行を折り返す" VerticalAlignment="Center"/>
-                        </DockPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <ComboBox x:Name="ConvertBox" DockPanel.Dock="Right" Style="{StaticResource RowCombo}"
-                                      MinWidth="160" SelectionChanged="ConvertBox_SelectionChanged"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="文字変換"/>
-                                <TextBlock Style="{StaticResource SettingDescription}"
-                                           Text="表示とコピーする文字を変換します。欄の右クリックメニューからも切り替えられます。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-
-                    <TextBlock Style="{StaticResource SettingHeader}" Text="ウィンドウ"/>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <CheckBox x:Name="TopmostCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="TopmostCheck_Click"/>
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="常に手前に表示する" VerticalAlignment="Center"/>
-                        </DockPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <CheckBox x:Name="FollowCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="FollowCheck_Click"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="読み取り枠の右側について行く"/>
-                                <TextBlock Style="{StaticResource SettingDescription}" Text="枠を動かすと、このウィンドウも枠の右隣に移動します。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
-        </TabItem>
-
-        <!-- ───────── 議事録 ───────── -->
-        <TabItem Header="議事録">
-            <ScrollViewer Style="{StaticResource Page}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource SettingHeader}" Text="議事録"/>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
-                                <Slider x:Name="MinutesFontSlider" Width="160" Minimum="9" Maximum="40" SmallChange="1" LargeChange="2"
-                                        IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"
-                                        ValueChanged="MinutesFontSlider_ValueChanged"/>
-                                <TextBlock x:Name="MinutesFontValue" Width="40" TextAlignment="Right" VerticalAlignment="Center"
-                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                            </StackPanel>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="議事録の文字の大きさ"/>
-                                <TextBlock Style="{StaticResource SettingDescription}" Text="議事録の発言の文字です。議事録の画面で Ctrl+ホイール、または Ctrl キーと +・−・0 でも変えられます。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <CheckBox x:Name="MinutesTimeCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="MinutesDisplay_Click"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="発言の時刻を表示する"/>
-                                <TextBlock Style="{StaticResource SettingDescription}" Text="発言の時刻 (ファイルでは先頭からの時間) を表示し、コピー・保存にも含めます。議事録の画面の「表示」でも変えられます。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <CheckBox x:Name="MinutesTranslateCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="MinutesDisplay_Click"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="日本語以外の発言に日本語訳を付ける"/>
-                                <TextBlock Style="{StaticResource SettingDescription}" Text="英語などの発言の下に日本語訳を出し、コピー・保存にも含めます (PC の中で訳します)。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <CheckBox x:Name="MinutesFillerCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="MinutesDisplay_Click"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="相づちを除く"/>
-                                <TextBlock Style="{StaticResource SettingDescription}" Text="「はい」「なるほど」「えーと」などだけの発言を、画面とコピー・保存から除きます (隠すだけなので、外すと戻ります)。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <CheckBox x:Name="MinutesScrollCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}" Click="MinutesDisplay_Click"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="自動スクロール"/>
-                                <TextBlock Style="{StaticResource SettingDescription}" Text="新しい発言が加わるたびに、いちばん下 (最新) までスクロールします。発言を書き直している間は止まります。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <CheckBox x:Name="MinutesAiTranslateCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}"
-                                      Click="MinutesAiTranslate_Click"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="日本語訳を AI で作る (前後の発言と用語を使う)"/>
-                                <TextBlock Style="{StaticResource SettingDescription}"
-                                           Text="英語などの発言を、文脈による補正と同じ AI (PC 内) が、直前の発言の流れと登録した用語を見て訳します。製品名などの取り違えが減りますが、翻訳モデルより時間がかかります (GPU があると速い)。AI が使えないときは翻訳モデルで訳します。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <CheckBox x:Name="MinutesVoicesCheck" DockPanel.Dock="Right" Style="{StaticResource RowCheck}"
-                                      Click="MinutesVoices_Click"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="名前を付けた話者の声を覚える"/>
-                                <TextBlock Style="{StaticResource SettingDescription}"
-                                           Text="話者に名前を付けると声の特徴を覚え、次の会議から似た声の話者に自動で名前を付けます。覚えるのは声の特徴 (数値) だけで、音声は保存しません。覚えた声は議事録の画面の「覚えた声」で確認・削除できます。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
-        </TabItem>
-
-        <!-- ───────── ショートカット ───────── -->
-        <TabItem Header="ショートカット">
-            <ScrollViewer Style="{StaticResource Page}">
-                <StackPanel x:Name="ShortcutList">
-                    <TextBlock Style="{StaticResource SettingHeader}" Text="どのアプリを使っていても効くキー"/>
-                    <TextBlock Style="{StaticResource SettingHeader}" Text="GetText のウィンドウで使うキー" x:Name="LocalShortcutHeader"/>
-                </StackPanel>
-            </ScrollViewer>
-        </TabItem>
-
-        <!-- ───────── 情報 ───────── -->
-        <TabItem x:Name="InfoTab" Header="セットアップ・情報">
-            <ScrollViewer Style="{StaticResource Page}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource SettingHeader}" Text="セットアップと状態"/>
-                    <Border Style="{StaticResource SettingRow}">
-                        <DockPanel>
-                            <Button x:Name="SetupButton" DockPanel.Dock="Right" Content="セットアップを実行" Margin="12,0,0,0" VerticalAlignment="Center"
-                                    Style="{StaticResource AccentButtonStyle}" Click="Setup_Click"/>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="AI OCR・ローカル翻訳・議事録のセットアップ"/>
-                                <TextBlock Style="{StaticResource SettingDescription}"
-                                           Text="入れる機能 (フル 約 9GB・標準 約 5GB・最小 約 1GB) を、この PC に合うおすすめ付きで選べます。必要なソフト (Python) が無ければ自動で入れます。取得済みの分は省きます。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="AI OCR (RapidOCR + PP-OCRv6 small, Apache-2.0)"/>
-                            <TextBlock x:Name="AiOcrStatus" Style="{StaticResource SettingDescription}"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="ローカル翻訳 (CTranslate2)"/>
-                            <TextBlock Style="{StaticResource SettingDescription}"
-                                       Text="英語: FuguMT (CC BY-SA 4.0) ・ その他の言語: NLLB-200 1.3B (CC BY-NC 4.0・非商用)"/>
-                            <TextBlock x:Name="LocalTranslationStatus" Style="{StaticResource SettingDescription}"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="議事録 (音声の文字起こし)"/>
-                            <TextBlock Style="{StaticResource SettingDescription}"
-                                       Text="音声認識: ReazonSpeech k2 v2 (日本語・軽さ優先, Apache-2.0)・kotoba-whisper v2.0 (日本語・正確さ優先, MIT)・Whisper large-v3 turbo (英語など, MIT) ・ 話者の聞き分け: 3D-Speaker CAM++ (Apache-2.0) ・ 無音検出: Silero VAD (MIT) ・ 文脈補正: Qwen3-4B-Instruct-2507 (Apache-2.0)"/>
-                            <TextBlock x:Name="MinutesStatus" Style="{StaticResource SettingDescription}"/>
-                        </StackPanel>
-                    </Border>
-
-                    <TextBlock Style="{StaticResource SettingHeader}" Text="フォルダ"/>
-                    <Border Style="{StaticResource SettingRow}">
-                        <WrapPanel>
-                            <Button Content="設定フォルダを開く" Margin="0,0,8,0" Click="OpenSettingsFolder_Click"/>
-                            <Button Content="ログフォルダを開く" Margin="0,0,8,0" Click="OpenLogFolder_Click"/>
-                            <Button Content="モデルのフォルダを開く" Click="OpenModelFolder_Click"/>
-                        </WrapPanel>
-                    </Border>
-                    <TextBlock x:Name="VersionText" Style="{StaticResource SettingDescription}" Margin="2,12,0,0"/>
-                </StackPanel>
-            </ScrollViewer>
-        </TabItem>
-    </TabControl>
+        </DockPanel>
+    </Grid>
 </Window>

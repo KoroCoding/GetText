@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:GetText"
         x:Class="GetText.CaptureWindow"
         Title="GetText 読み取り枠"
         SystemDecorations="None" Background="Transparent" TransparencyLevelHint="Transparent"
@@ -30,9 +31,12 @@
                 PointerPressed="TopBar_PointerPressed" ToolTip.Tip="ドラッグで移動 / 右下の角をドラッグでサイズ変更">
             <DockPanel LastChildFill="False">
                 <!-- ボタンを先に置く (狭い枠・長い題名でも、一時停止と終了のボタンが押せるように) -->
-                <Button DockPanel.Dock="Right" Classes="bar" Content="✕" ToolTip.Tip="終了" Click="Close_Click"/>
-                <Button x:Name="PauseButton" DockPanel.Dock="Right" Classes="bar" Content="❚❚" FontSize="9"
-                        ToolTip.Tip="一時停止" Click="Pause_Click"/>
+                <Button DockPanel.Dock="Right" Classes="bar" ToolTip.Tip="文字の読み取りを閉じる" Click="Close_Click" AutomationProperties.Name="文字の読み取りを閉じる">
+                    <local:GtIcon Icon="Close" Width="11" Height="11" Foreground="White"/>
+                </Button>
+                <Button x:Name="PauseButton" DockPanel.Dock="Right" Classes="bar" ToolTip.Tip="一時停止" Click="Pause_Click" AutomationProperties.Name="一時停止">
+                    <local:GtIcon x:Name="PauseIcon" Icon="Pause" Width="12" Height="12" Foreground="White"/>
+                </Button>
                 <TextBlock x:Name="TitleText" TextTrimming="CharacterEllipsis" Text="GetText" Foreground="White" FontWeight="SemiBold"
                            VerticalAlignment="Center" Margin="8,0,6,0"/>
                 <TextBlock x:Name="SizeText" TextTrimming="CharacterEllipsis" Foreground="#DDFFFFFF" VerticalAlignment="Center"/>
@@ -42,9 +46,18 @@
         <!-- 縁: 外側は半透明 (つかみ代)、内側は実線。中は透明で、クリックは下の窓に通る -->
         <Border Grid.Row="1" x:Name="OuterFrame" BorderThickness="3,0,3,3" BorderBrush="#552B6CB0" CornerRadius="0,0,4,4">
             <Border x:Name="InnerFrame" BorderThickness="2,0,2,2" BorderBrush="#2B6CB0">
-                <Panel x:Name="CaptureArea"/>
+                <Panel x:Name="CaptureArea">
+                    <!-- 検索で見つかった所の印 (GetText の窓は画面の取り込みに写らないので、読み取りには影響しない) -->
+                    <Canvas x:Name="HighlightLayer" IsHitTestVisible="False" ClipToBounds="True"/>
+                </Panel>
             </Border>
         </Border>
+
+        <!-- GetText の印: 枠の四隅の角 (⌜ ⌝ ⌞)。切り取る範囲をはっきり示す (右下はサイズ変更の角) -->
+        <Panel Grid.Row="1" IsHitTestVisible="False" Margin="-1,0,-1,-1">
+
+            <Path x:Name="CornerBL" HorizontalAlignment="Left" VerticalAlignment="Bottom" Stroke="#2B6CB0" StrokeThickness="4" StrokeLineCap="Round" Data="M 2,0 V 16 H 18"/>
+        </Panel>
 
         <!-- 右下のサイズ変更の角 -->
         <Path x:Name="Grip" Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,1,1"

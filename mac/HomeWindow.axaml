@@ -1,92 +1,160 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:GetText"
         x:Class="GetText.HomeWindow"
-        Title="GetText" Width="500" SizeToContent="Height" CanResize="False" WindowStartupLocation="CenterScreen"
+        x:DataType="local:HomeWindow"
+        Title="GetText" Width="660" SizeToContent="Height" CanResize="False" WindowStartupLocation="CenterScreen"
         Icon="avares://GetText/Assets/app.ico">
     <Window.Styles>
-        <Style Selector="Border.feature">
-            <Setter Property="Width" Value="40"/>
-            <Setter Property="Height" Value="40"/>
-            <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="Margin" Value="0,0,14,0"/>
-            <Setter Property="VerticalAlignment" Value="Top"/>
-            <Setter Property="Background" Value="{DynamicResource SystemAccentColor}"/>
+        <!-- 機能のタイル (全体を押して開く) -->
+        <Style Selector="Button.tile">
+            <Setter Property="Background" Value="{DynamicResource Gt.Surface}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Gt.Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="{StaticResource Gt.Radius.Card}"/>
+            <Setter Property="Padding" Value="16,16,12,12"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+            <Setter Property="MinHeight" Value="140"/>
         </Style>
-        <Style Selector="Border.feature > TextBlock">
-            <Setter Property="FontSize" Value="20"/>
-            <Setter Property="HorizontalAlignment" Value="Center"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="Foreground" Value="White"/>
+        <Style Selector="Button.tile:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Gt.SurfaceHover}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Gt.BorderStrong}"/>
         </Style>
-        <Style Selector="Border.chip">
-            <Setter Property="CornerRadius" Value="9"/>
-            <Setter Property="Padding" Value="8,1"/>
-            <Setter Property="Margin" Value="8,0,0,0"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="Background" Value="#2216A34A"/>
+        <Style Selector="Button.tile:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Gt.SurfacePressed}"/>
+        </Style>
+        <!-- 全体を押せる行 -->
+        <Style Selector="Button.row">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="CornerRadius" Value="{StaticResource Gt.Radius.Button}"/>
+        </Style>
+        <Style Selector="Button.row:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Gt.SubtleHover}"/>
+        </Style>
+        <Style Selector="TextBlock.section">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource Gt.TextPrimary}"/>
+            <Setter Property="Margin" Value="4,0,0,8"/>
         </Style>
     </Window.Styles>
-    <StackPanel Margin="14,12,14,12">
-        <StackPanel Margin="2,0,2,12">
-            <TextBlock Text="GetText" FontSize="20" FontWeight="SemiBold"/>
-            <TextBlock Classes="caption" Text="使う機能を選んでください (いくつでも同時に開けます。ここで切り替えられます)" TextWrapping="Wrap"/>
-        </StackPanel>
+    <StackPanel Margin="24,16,24,16">
+        <!-- 見出し: GetText の印と名前 / 設定 -->
+        <DockPanel Margin="0,0,0,16">
+            <Button DockPanel.Dock="Right" Classes="command" Click="Settings_Click" VerticalAlignment="Center"
+                    ToolTip.Tip="設定 (⌘,)" AutomationProperties.Name="設定">
+                <local:GtIcon Icon="Settings"/>
+            </Button>
+            <Viewbox Width="32" Height="32" Margin="0,0,12,0" VerticalAlignment="Center">
+                <Canvas Width="24" Height="24">
+                    <Path Data="M3,8 V3 H8 M16,3 H21 V8 M21,16 V21 H16 M8,21 H3 V16" Stroke="{DynamicResource Gt.Accent}" StrokeThickness="2"
+                          StrokeLineCap="Round" StrokeJoin="Round"/>
+                    <Path Data="M8,10 H16 M8,14 H13" Stroke="{DynamicResource Gt.TextPrimary}" StrokeThickness="2" StrokeLineCap="Round"/>
+                </Canvas>
+            </Viewbox>
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock Text="GetText" FontSize="{StaticResource Gt.Font.Title}" FontWeight="SemiBold" Foreground="{DynamicResource Gt.TextPrimary}"/>
+                <TextBlock Classes="caption" Text="画面の文字・会議・録画を、この Mac の中で"/>
+            </StackPanel>
+        </DockPanel>
 
-        <Border Classes="card" Padding="14,12" Margin="0,0,0,8">
+        <!-- 検索 (コマンドの一覧を開く) -->
+        <Button x:Name="SearchButton" Click="Search_Click" Margin="0,0,0,24" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                Background="{DynamicResource Gt.Surface}" BorderBrush="{DynamicResource Gt.Border}" BorderThickness="1"
+                CornerRadius="{StaticResource Gt.Radius.Input}" Padding="12,8"
+                ToolTip.Tip="機能・操作・設定・最近の議事録を探して実行します (⌘K)" AutomationProperties.Name="機能・操作・設定を検索 (⌘K)">
             <DockPanel>
-                <Border Classes="feature"><TextBlock Text="文"/></Border>
-                <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center" Margin="10,0,0,0">
-                    <Button x:Name="OcrOpen" Classes="accent" MinWidth="96" HorizontalContentAlignment="Center" Content="開く" Click="OcrOpen_Click"/>
-                    <Button x:Name="OcrClose" MinWidth="96" HorizontalContentAlignment="Center" Margin="0,6,0,0" Content="閉じる" IsVisible="False" Click="OcrClose_Click"/>
-                </StackPanel>
-                <StackPanel>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Classes="title" Text="文字の読み取りと翻訳"/>
-                        <Border x:Name="OcrChip" Classes="chip" IsVisible="False"><TextBlock Text="開いています" FontSize="11" Foreground="#15803D"/></Border>
-                    </StackPanel>
-                    <TextBlock Classes="caption" TextWrapping="Wrap" Margin="0,3,0,0" Text="画面に置いた枠の中の文字を読み取り、日本語に訳します。"/>
-                </StackPanel>
+                <Border DockPanel.Dock="Right" Background="{DynamicResource Gt.SurfaceSecondary}" BorderBrush="{DynamicResource Gt.Border}" BorderThickness="1"
+                        CornerRadius="{StaticResource Gt.Radius.Small}" Padding="6,0">
+                    <TextBlock Text="⌘K" FontSize="{StaticResource Gt.Font.Caption}" Foreground="{DynamicResource Gt.TextSecondary}"/>
+                </Border>
+                <local:GtIcon Icon="Search" Foreground="{DynamicResource Gt.TextSecondary}" Margin="0,0,12,0"/>
+                <TextBlock Text="機能・操作・設定を検索" Foreground="{DynamicResource Gt.TextTertiary}" VerticalAlignment="Center"/>
             </DockPanel>
+        </Button>
+
+        <!-- 機能 -->
+        <TextBlock Classes="section" Text="機能"/>
+        <ItemsControl x:Name="FeatureList">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Columns="3"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="local:FeatureTile">
+                    <Grid Margin="0,0,8,8">
+                        <Button Classes="tile" Click="Tile_Click" AutomationProperties.Name="{Binding AccessibleName}" ToolTip.Tip="{Binding ToolTip}">
+                            <DockPanel>
+                                <Border DockPanel.Dock="Bottom" CornerRadius="12" Padding="8,2" Margin="0,12,0,0" HorizontalAlignment="Left"
+                                        Background="{Binding PillBackground}" IsVisible="{Binding HasStatus}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <local:GtIcon Icon="{Binding StatusIcon}" Width="12" Height="12" Foreground="{Binding StatusForeground}" Margin="0,0,6,0"/>
+                                        <TextBlock Text="{Binding StatusLabel}" FontSize="{StaticResource Gt.Font.Caption}" Foreground="{Binding StatusForeground}"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border DockPanel.Dock="Top" Width="36" Height="36" CornerRadius="{StaticResource Gt.Radius.Card}" HorizontalAlignment="Left"
+                                        Background="{DynamicResource Gt.AccentSubtle}" Margin="0,0,0,12">
+                                    <local:GtIcon Icon="{Binding Icon}" Width="20" Height="20" Foreground="{DynamicResource Gt.AccentText}"/>
+                                </Border>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{DynamicResource Gt.TextPrimary}"/>
+                                    <TextBlock Text="{Binding Description}" Classes="caption" TextWrapping="Wrap" MaxLines="3" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Button>
+                        <Button Classes="icon" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,6,0" Click="TileClose_Click"
+                                IsVisible="{Binding CanClose}" ToolTip.Tip="{Binding CloseLabel}" AutomationProperties.Name="{Binding CloseLabel}">
+                            <local:GtIcon Icon="Close" Width="12" Height="12"/>
+                        </Button>
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- 最近の議事録 -->
+        <TextBlock Classes="section" Text="最近の議事録" Margin="4,16,0,8"/>
+        <Border Classes="card" Padding="4">
+            <Grid>
+                <ItemsControl x:Name="RecentList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="local:RecentItem">
+                            <Button Classes="row" Click="Recent_Click" Tag="{Binding Path}" ToolTip.Tip="{Binding Path}" AutomationProperties.Name="{Binding Label}">
+                                <DockPanel>
+                                    <local:GtIcon DockPanel.Dock="Right" Icon="ChevronRight" Width="12" Height="12" Foreground="{DynamicResource Gt.TextTertiary}"/>
+                                    <local:GtIcon Icon="Document" Foreground="{DynamicResource Gt.TextSecondary}" Margin="0,0,12,0"/>
+                                    <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Foreground="{DynamicResource Gt.TextPrimary}"/>
+                                </DockPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <DockPanel x:Name="RecentEmpty" Margin="12" IsVisible="False">
+                    <Button DockPanel.Dock="Right" Content="議事録を開く" VerticalAlignment="Center" Margin="12,0,0,0" Click="RecentEmptyOpen_Click"/>
+                    <local:GtIcon Icon="History" Width="20" Height="20" Foreground="{DynamicResource Gt.TextTertiary}" Margin="0,0,12,0" VerticalAlignment="Top"/>
+                    <StackPanel>
+                        <TextBlock Text="まだ議事録はありません" FontWeight="SemiBold" Foreground="{DynamicResource Gt.TextPrimary}"/>
+                        <TextBlock Classes="caption" TextWrapping="Wrap" Margin="0,2,0,0" Text="会議を記録すると自動で保存され、ここからすぐに開けます。"/>
+                    </StackPanel>
+                </DockPanel>
+            </Grid>
         </Border>
 
-        <Border Classes="card" Padding="14,12" Margin="0,0,0,8">
-            <DockPanel>
-                <Border Classes="feature"><TextBlock Text="🎙"/></Border>
-                <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center" Margin="10,0,0,0">
-                    <Button x:Name="MinutesOpen" Classes="accent" MinWidth="96" HorizontalContentAlignment="Center" Content="開く" Click="MinutesOpen_Click"/>
-                    <Button x:Name="MinutesClose" MinWidth="96" HorizontalContentAlignment="Center" Margin="0,6,0,0" Content="閉じる" IsVisible="False" Click="MinutesClose_Click"/>
+        <!-- 下: 動きの設定と終了 -->
+        <DockPanel Margin="0,16,0,0">
+            <Button DockPanel.Dock="Right" Classes="command" Click="Exit_Click" ToolTip.Tip="GetText を終了します (⌘Q)" AutomationProperties.Name="GetText を終了">
+                <StackPanel Orientation="Horizontal">
+                    <local:GtIcon Icon="Exit" Width="14" Height="14"/>
+                    <TextBlock Text="終了" Margin="8,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
-                <StackPanel>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Classes="title" Text="議事録"/>
-                        <Border x:Name="MinutesChip" Classes="chip" IsVisible="False"><TextBlock x:Name="MinutesChipText" Text="開いています" FontSize="11" Foreground="#15803D"/></Border>
-                    </StackPanel>
-                    <TextBlock Classes="caption" TextWrapping="Wrap" Margin="0,3,0,0" Text="会議アプリの音声を文字起こしして、話者と時刻つきの議事録を作ります。"/>
-                </StackPanel>
-            </DockPanel>
-        </Border>
-
-        <Border Classes="card" Padding="14,12" Margin="0,0,0,8">
-            <DockPanel>
-                <Border Classes="feature"><TextBlock Text="●"/></Border>
-                <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center" Margin="10,0,0,0">
-                    <Button x:Name="RecordOpen" Classes="accent" MinWidth="96" HorizontalContentAlignment="Center" Content="開く" Click="RecordOpen_Click"/>
-                    <Button x:Name="RecordClose" MinWidth="96" HorizontalContentAlignment="Center" Margin="0,6,0,0" Content="閉じる" IsVisible="False" Click="RecordClose_Click"/>
-                </StackPanel>
-                <StackPanel>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Classes="title" Text="画面の録画"/>
-                        <Border x:Name="RecordChip" Classes="chip" IsVisible="False"><TextBlock x:Name="RecordChipText" Text="開いています" FontSize="11" Foreground="#15803D"/></Border>
-                    </StackPanel>
-                    <TextBlock Classes="caption" TextWrapping="Wrap" Margin="0,3,0,0" Text="選んだウィンドウ (または画面全体) を、その音も入れて MP4 に録画します。"/>
-                </StackPanel>
-            </DockPanel>
-        </Border>
-
-        <DockPanel Margin="2,4,0,0">
-            <Button DockPanel.Dock="Right" Classes="command" Content="終了" Click="Exit_Click" ToolTip.Tip="GetText を終了します (⌘Q)"/>
-            <Button DockPanel.Dock="Right" Classes="command" Content="⚙ 設定" Click="Settings_Click" ToolTip.Tip="設定 (⌘,)"/>
-            <CheckBox x:Name="MinimizeCheck" Content="開いたらこの画面をしまう" VerticalAlignment="Center" Click="MinimizeCheck_Click"
+            </Button>
+            <CheckBox x:Name="MinimizeCheck" Content="機能を開いたらホームをしまう" VerticalAlignment="Center" Click="MinimizeCheck_Click"
                       ToolTip.Tip="機能を開くと、この画面を Dock にしまいます (機能をすべて閉じると戻ります)"/>
         </DockPanel>
     </StackPanel>

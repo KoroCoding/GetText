@@ -59,13 +59,236 @@ public partial class SettingsWindow : Window
         ConvertBox.SelectedItem = SettingsOptions.Find(SettingsOptions.ConvertModes, settings.Convert);
         TopmostCheck.IsChecked = settings.Topmost;
         FollowCheck.IsChecked = settings.Follow;
+        OcrViewBox.ItemsSource = SettingsOptions.OcrViews;
+        OcrViewBox.SelectedItem = SettingsOptions.Find(SettingsOptions.OcrViews, settings.OcrView);
+        HomeMinimizeCheck.IsChecked = settings.HomeMinimizeOnOpen;
+        RecordFolderText.Text = RecordFolder;
+        RecordFolderText.ToolTip = RecordFolder;
+
+        foreach (var page in Pages.Children.OfType<StackPanel>())
+            if (page.Tag is string tag && Enum.TryParse<SettingsPage>(tag, out var p)) _pages[p] = page;
+        foreach (var nav in NavPanel.Children.OfType<RadioButton>())
+            if (nav.Tag is string tag && Enum.TryParse<SettingsPage>(tag, out var p)) _nav[p] = nav;
 
         BuildShortcuts();
+        BuildPrivacy();
         UpdateDependentState();
-        Activated += (_, _) => UpdateStatus();
+        PreviewKeyDown += (_, e) =>
+        {
+            if (AppCommands.HandleKey(this, e, CommandContext.Settings)) return;
+            if (e.Key == System.Windows.Input.Key.F && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control)
+            {
+                SettingSearch.Focus();
+                SettingSearch.SelectAll();
+                e.Handled = true;
+            }
+            else if (e.Key == System.Windows.Input.Key.Escape && SettingSearch.Text.Length > 0)
+            {
+                SettingSearch.Text = "";
+                e.Handled = true;
+            }
+        };
+        Activated += (_, _) => { UpdateStatus(); BuildPrivacy(); };
+        // ライト / ダークを変えたら、コードで色を付けた印 (プライバシー・モデルの状態) も塗り直す
+        Action repaint = () => { BuildPrivacy(); UpdateStatus(); };
+        Theme.Changed += repaint;
+        Closed += (_, _) => Theme.Changed -= repaint;
         Loaded += (_, _) => UpdateStatus();
+        SelectPage(SettingsPage.Appearance);
         _loading = false;
     }
+
+    private readonly Dictionary<SettingsPage, StackPanel> _pages = [];
+    private readonly Dictionary<SettingsPage, RadioButton> _nav = [];
+    private SettingsPage _page = SettingsPage.Appearance;
+
+    /// <summary>今開いているページ。</summary>
+    public SettingsPage CurrentPage => _page;
+
+    /// <summary>ページを開く (検索していれば検索を消す)。</summary>
+    public void SelectPage(SettingsPage page)
+    {
+        if (_nav.TryGetValue(page, out var nav))
+        {
+            if (nav.IsChecked == true) ShowPage(page);
+            else nav.IsChecked = true; // (Nav_Checked でページを出す)
+        }
+    }
+
+    private void Nav_Checked(object sender, RoutedEventArgs e)
+    {
+        if (sender is RadioButton { Tag: string tag } && Enum.TryParse<SettingsPage>(tag, out var page)) ShowPage(page);
+    }
+
+    private void ShowPage(SettingsPage page)
+    {
+        _page = page;
+        if (SettingSearch.Text.Length > 0) SettingSearch.Text = ""; // (検索の結果を閉じる)
+        foreach (var (p, panel) in _pages) panel.Visibility = p == page ? Visibility.Visible : Visibility.Collapsed;
+        SearchResults.Visibility = Visibility.Collapsed;
+        PageTitleText.Text = AppCommands.SettingsPages.First(x => x.Page == page).Title;
+        PageScroll.ScrollToTop();
+    }
+
+    // ───────── 設定の検索 ─────────
+
+    public sealed record SettingHit(string Label, string Where, SettingsPage Page, Border Row);
+
+    /// <summary>すべてのページの設定の行 (名前・説明) から探す。</summary>
+    internal List<SettingHit> FindSettings(string query)
+    {
+        var tokens = CommandSearch.Normalize(query).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var hits = new List<SettingHit>();
+        if (tokens.Length == 0) return hits;
+        foreach (var (page, panel) in _pages)
+        {
+            string pageTitle = AppCommands.SettingsPages.First(x => x.Page == page).Title;
+            foreach (var row in LogicalRows(panel))
+            {
+                var texts = LogicalTexts(row).ToList();
+                var label = texts.FirstOrDefault(t => t.Style == (Style)FindResource("SettingLabel"))?.Text;
+                if (string.IsNullOrEmpty(label)) continue;
+                var haystack = CommandSearch.Normalize(pageTitle + " " + string.Join(" ", texts.Select(t => t.Text)));
+                if (tokens.All(t => haystack.Contains(t, StringComparison.Ordinal))) hits.Add(new SettingHit(label, pageTitle, page, row));
+            }
+        }
+        return hits;
+    }
+
+    private IEnumerable<Border> LogicalRows(DependencyObject root)
+    {
+        foreach (var child in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
+        {
+            if (child is Border { Style: { } style } row && style == (Style)FindResource("SettingRow")) yield return row;
+            else foreach (var nested in LogicalRows(child)) yield return nested;
+        }
+    }
+
+    private static IEnumerable<TextBlock> LogicalTexts(DependencyObject root)
+    {
+        foreach (var child in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
+        {
+            if (child is TextBlock t) yield return t;
+            foreach (var nested in LogicalTexts(child)) yield return nested;
+        }
+    }
+
+    private void SettingSearch_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        bool searching = SettingSearch.Text.Length > 0;
+        SettingSearchPlaceholder.Visibility = searching ? Visibility.Collapsed : Visibility.Visible;
+        SettingSearchClear.Visibility = searching ? Visibility.Visible : Visibility.Collapsed;
+        if (!searching)
+        {
+            ShowPage(_page);
+            return;
+        }
+        var hits = FindSettings(SettingSearch.Text);
+        foreach (var panel in _pages.Values) panel.Visibility = Visibility.Collapsed;
+        SearchResults.Visibility = Visibility.Visible;
+        SearchResultList.ItemsSource = hits;
+        SearchEmpty.Visibility = hits.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        PageTitleText.Text = hits.Count == 0 ? "検索" : $"検索 ・ {hits.Count} 件";
+    }
+
+    /// <summary>見本の画面・動作確認: 設定を検索する。</summary>
+    internal void ShowDemoSearch(string query) => SettingSearch.Text = query;
+
+    private void SettingSearchClear_Click(object sender, RoutedEventArgs e)
+    {
+        SettingSearch.Text = "";
+        SettingSearch.Focus();
+    }
+
+    /// <summary>検索の結果を押した: そのページを開き、その行を見える所に出して少しの間 枠で示す。</summary>
+    private void SearchResult_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not SettingHit hit) return;
+        SelectPage(hit.Page);
+        // 詳細設定にたたんである行なら開く
+        for (DependencyObject? node = hit.Row; node != null; node = LogicalTreeHelper.GetParent(node))
+            if (node is Expander expander) expander.IsExpanded = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            hit.Row.BringIntoView();
+            var before = hit.Row.BorderBrush;
+            hit.Row.BorderBrush = (System.Windows.Media.Brush)FindResource("Gt.FocusRing");
+            hit.Row.BorderThickness = new Thickness(2);
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1.6) };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                hit.Row.SetResourceReference(Border.BorderBrushProperty, "Gt.Border");
+                hit.Row.BorderThickness = new Thickness(1);
+            };
+            timer.Start();
+        }, System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    // ───────── プライバシー ─────────
+
+    public sealed record PrivacyRow(string Label, string Description, bool Online, SettingsPage? Page, string ActionLabel)
+    {
+        public string PillText => Online ? "オンライン" : "PC 内";
+        public string PillGlyph => WindowsIcons.Glyph(Online ? AppIcon.Cloud : AppIcon.Local);
+        public System.Windows.Media.Brush PillBackground => Theme.Brush(p => Online ? p.WarningSubtle : p.SuccessSubtle);
+        public System.Windows.Media.Brush PillForeground => Theme.Brush(p => Online ? p.Warning : p.Success);
+        public Visibility ActionVisibility => Page == null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>何を PC の中で処理し、何をインターネットに送るか (今の設定で)。</summary>
+    private void BuildPrivacy()
+    {
+        bool cloud = _settings.Translate && _settings.TranslationEngine != TranslationEngine.Local;
+        string service = _settings.TranslationEngine == TranslationEngine.DeepL ? "DeepL" : "Google";
+        PrivacyList.ItemsSource = new List<PrivacyRow>
+        {
+            new("文字の読み取り", "枠の中の画面は PC の中で読み取ります (AI OCR・Windows OCR とも)。画像は保存しません。", false, SettingsPage.ScreenOcr, "設定"),
+            new("翻訳", cloud ? $"外国語と判定した文を {service} に送って訳します。" : "PC の中の翻訳モデルで訳します。文字は外に送りません。", cloud, SettingsPage.Translation, "変更"),
+            new("議事録の文字起こし", "会議の音声は PC の中で文字にします。" + (_settings.MinutesSaveAudio ? "聞き直せるよう、音声を PC に保存します。" : "音声は保存しません。"), false, SettingsPage.Meetings, "設定"),
+            new("話者の声の記憶", _settings.MinutesRememberVoices ? "名前を付けた話者の声の特徴 (数値) を PC に覚えます。音声そのものは保存しません。" : "覚えません。", false, SettingsPage.Meetings, "設定"),
+            new("画面の録画", "録画は PC のフォルダに保存します。どこにも送りません。", false, SettingsPage.Recording, "設定"),
+            new("セットアップ", "AI のモデルを入れるときだけ、配布元 (Hugging Face など) からダウンロードします。", true, SettingsPage.Models, "開く"),
+        };
+    }
+
+    private void PrivacyAction_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is SettingsPage page) SelectPage(page);
+    }
+
+    // ───────── 外観・ホーム・録画 ─────────
+
+    private void HomeMinimize_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.HomeMinimizeOnOpen = HomeMinimizeCheck.IsChecked == true;
+        _settings.Save();
+    }
+
+    private void OcrViewBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || OcrViewBox.SelectedItem is not Option<OcrView> o) return;
+        _main.SetView(o.Value);
+    }
+
+    private string RecordFolder => string.IsNullOrWhiteSpace(_settings.RecordFolder)
+        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "GetText")
+        : _settings.RecordFolder;
+
+    private void RecordFolderChange_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "録画の保存先", InitialDirectory = Directory.Exists(RecordFolder) ? RecordFolder : null };
+        if (dialog.ShowDialog(this) != true) return;
+        _settings.RecordFolder = dialog.FolderName;
+        _settings.Save();
+        RecordFolderText.Text = RecordFolder;
+        RecordFolderText.ToolTip = RecordFolder;
+        App.Home?.Recorder?.ReloadFolder();
+    }
+
+    private void RecordFolderOpen_Click(object sender, RoutedEventArgs e) => OpenFolder(RecordFolder);
+
+    private void OpenRecorder_Click(object sender, RoutedEventArgs e) => App.Home?.OpenRecorder();
 
     private Border? _pressedRow;
 
@@ -109,10 +332,6 @@ public partial class SettingsWindow : Window
         return null;
     }
 
-    public void SelectTab(int index) => Tabs.SelectedIndex = Math.Clamp(index, 0, Tabs.Items.Count - 1);
-
-    /// <summary>「議事録」のページの番号。</summary>
-    public const int MinutesTab = 3;
 
     /// <summary>議事録の表示の設定を読み直す (議事録の画面の「表示」で変えたとき)。</summary>
     public void LoadMinutesDisplay()
@@ -150,7 +369,7 @@ public partial class SettingsWindow : Window
         bool windowsOcr = _settings.OcrEngine == OcrEngineKind.Windows || !AiOcr.IsInstalled;
         LanguageBox.IsEnabled = ScaleBox.IsEnabled = AccuracyCheck.IsEnabled = windowsOcr;
         OcrEngineDescription.Text = _settings.OcrEngine == OcrEngineKind.Ai && !AiOcr.IsInstalled
-            ? "AI は未セットアップのため、今は Windows 標準で読み取っています (「セットアップ・情報」から入れられます)。"
+            ? "AI は未セットアップのため、今は Windows 標準で読み取っています (「モデルとセットアップ」から入れられます)。"
             : "AI は記号・表・小さな文字まで正確に読めます (要セットアップ)。使えないときは自動で Windows 標準に切り替わります。";
 
         EngineBox.IsEnabled = _settings.Translate;
@@ -169,7 +388,7 @@ public partial class SettingsWindow : Window
     private void UpdateStatus()
     {
         AiOcrStatus.Text = !AiOcr.IsInstalled
-            ? "未セットアップ — 上の「セットアップを実行」でインストールできます"
+            ? "上の「セットアップを実行」で入れられます"
             : _main.AiOcr.Device switch
             {
                 "gpu" => "動作中 (GPU)",
@@ -177,7 +396,7 @@ public partial class SettingsWindow : Window
                 _ => "インストール済み (AI OCR を選ぶと起動します)",
             };
         LocalTranslationStatus.Text = !LocalTranslator.IsInstalled
-            ? "未セットアップ — 上の「セットアップを実行」でインストールできます"
+            ? "上の「セットアップを実行」で入れられます"
             : _settings.TranslationEngine == TranslationEngine.Local && _settings.Translate
                 ? "インストール済み ・ " + _main.Translator.EngineName
                 : "インストール済み";
@@ -187,10 +406,21 @@ public partial class SettingsWindow : Window
                 : "インストール済み ・ 日本語のみ (英語などは「セットアップを実行」で追加できます)"
             : "未セットアップ — 上の「セットアップを実行」でインストールできます";
         bool missing = !AiOcr.IsInstalled || !TranscriptionService.IsInstalled;
-        InfoTab.Header = missing ? "セットアップ・情報 ●" : "セットアップ・情報";
+        ModelsBadge.Visibility = missing && !App.DemoMode ? Visibility.Visible : Visibility.Collapsed;
         SetupButton.Content = missing ? "セットアップを実行" : "セットアップをやり直す・追加";
+        SetPill(AiOcrPill, AiOcrPillText, AiOcr.IsInstalled);
+        SetPill(TranslationPill, TranslationPillText, LocalTranslator.IsInstalled);
+        SetPill(MinutesPill, MinutesPillText, TranscriptionService.IsInstalled);
         var version = Assembly.GetExecutingAssembly().GetName().Version;
         VersionText.Text = $"GetText {version?.ToString(3)} ・ .NET {Environment.Version}";
+    }
+
+    // 入っている / 入っていない の印 (色と文字の両方で)
+    private void SetPill(Border pill, TextBlock text, bool installed)
+    {
+        pill.Background = Theme.Brush(p => installed ? p.SuccessSubtle : p.SurfaceSecondary);
+        text.Foreground = Theme.Brush(p => installed ? p.Success : p.TextSecondary);
+        text.Text = installed ? "入っています" : "未セットアップ";
     }
 
     private readonly List<UIElement> _globalRows = [];

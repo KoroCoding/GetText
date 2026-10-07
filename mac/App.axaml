@@ -5,8 +5,20 @@
              RequestedThemeVariant="Default">
     <Application.Resources>
         <ResourceDictionary>
-            <!-- 画面の文字 (Mac はヒラギノ。Windows で試すときは游ゴシック) -->
-            <FontFamily x:Key="UiFont">Hiragino Sans, Hiragino Kaku Gothic ProN, .AppleSystemUIFont, Yu Gothic UI, Meiryo UI, Segoe UI</FontFamily>
+            <!-- 画面の文字: Mac のシステムの字体 (日本語はヒラギノ)。起動時に DesignTokens.MacType で置き換わる -->
+            <FontFamily x:Key="UiFont">.AppleSystemUIFont, Hiragino Sans, Hiragino Kaku Gothic ProN, Segoe UI, Yu Gothic UI</FontFamily>
+            <!-- 文字の大きさと角の丸み (DesignTokens.MacType・MacRadii と同じ値。DesignSystemTests が一致を確かめる) -->
+            <x:Double x:Key="Gt.Font.Caption">11</x:Double>
+            <x:Double x:Key="Gt.Font.Body">13</x:Double>
+            <x:Double x:Key="Gt.Font.BodyStrong">13</x:Double>
+            <x:Double x:Key="Gt.Font.Subtitle">15</x:Double>
+            <x:Double x:Key="Gt.Font.Title">22</x:Double>
+            <x:Double x:Key="Gt.Font.LargeTitle">26</x:Double>
+            <CornerRadius x:Key="Gt.Radius.Small">4</CornerRadius>
+            <CornerRadius x:Key="Gt.Radius.Button">6</CornerRadius>
+            <CornerRadius x:Key="Gt.Radius.Input">6</CornerRadius>
+            <CornerRadius x:Key="Gt.Radius.Card">10</CornerRadius>
+            <CornerRadius x:Key="Gt.Radius.Dialog">12</CornerRadius>
             <FontFamily x:Key="MonoFont">Menlo, SF Mono, Consolas, Yu Gothic UI</FontFamily>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">

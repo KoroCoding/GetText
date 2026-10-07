@@ -8,7 +8,8 @@ public sealed record OcrLineData(IReadOnlyList<string> Words, double Left, doubl
     public string Compact => string.Concat(Words);
 }
 
-public sealed record OcrLineInfo(string Text, double Left, double Top, double Right, double Bottom)
+/// <param name="IsHeading">まとまりごとに表示するときの見出し (【1】など。画面の上の文字ではない)。</param>
+public sealed record OcrLineInfo(string Text, double Left, double Top, double Right, double Bottom, bool IsHeading = false)
 {
     public double Width => Right - Left;
     public double Height => Bottom - Top;
@@ -80,6 +81,9 @@ public sealed class OcrDocument
         }
         return doc;
     }
+
+    /// <summary>表示する順の行 (<see cref="ToDisplayText"/> の空でない行と 1 対 1)。</summary>
+    public IEnumerable<OcrLineInfo> Lines => Paragraphs.SelectMany(p => p);
 
     /// <summary>画面どおりの改行で並べた表示用テキスト。</summary>
     public string ToDisplayText() =>

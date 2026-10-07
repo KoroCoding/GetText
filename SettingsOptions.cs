@@ -26,6 +26,29 @@ public enum AppTheme
     Dark,
 }
 
+/// <summary>読み取った文字の並べ方。</summary>
+public enum OcrView
+{
+    /// <summary>上から順 (画面どおりの改行)。</summary>
+    Text,
+    /// <summary>枠・離れたかたまりごとに分けて、見出しを付ける (まとまりが無ければ上から順)。</summary>
+    Groups,
+}
+
+/// <summary>設定のページ (一般 / 機能 / 拡張 / 詳細 の順)。番号ではなくこの名前で開く。</summary>
+public enum SettingsPage
+{
+    Appearance,
+    Shortcuts,
+    Privacy,
+    ScreenOcr,
+    Translation,
+    Meetings,
+    Recording,
+    Models,
+    Diagnostics,
+}
+
 public enum PaneLayout
 {
     /// <summary>日本語訳を原文の下に表示する。</summary>
@@ -74,6 +97,11 @@ public static class SettingsOptions
     public static readonly Option<PaneLayout>[] Layouts =
     [
         new("原文の下", PaneLayout.Below), new("原文の右", PaneLayout.Right),
+    ];
+
+    public static readonly Option<OcrView>[] OcrViews =
+    [
+        new("上から順", OcrView.Text), new("枠・まとまりごと", OcrView.Groups),
     ];
 
     public static Option<T> Find<T>(IEnumerable<Option<T>> options, T value) =>

@@ -39,7 +39,7 @@ internal static class SmokeTest
             {
                 // 枠の中を実際に読み取る (枠の窓の番号 → 補助プログラムで画面を取り込み → Vision で文字を読む)
                 var status = await text.ReadNowForTestAsync();
-                Check(status.Contains("更新"), $"枠の中を読み取る (状態: {status})");
+                Check(System.Text.RegularExpressions.Regex.IsMatch(status, @"\d+ 行"), $"枠の中を読み取る (状態: {status})");
             }
             text.ShowDemo("Hello GetText\n議事録のテスト", "こんにちは GetText\n議事録のテスト", "Mac の文字認識", "ローカル翻訳", "見本");
 
@@ -50,7 +50,7 @@ internal static class SmokeTest
             Check(minutes.IsVisible, "議事録の画面を開く");
             Check(Render(minutes, Path.Combine(dir, "smoke_minutes.png")), "議事録の画面を描く");
 
-            text.OpenSettings(3);
+            text.OpenSettings(SettingsPage.Meetings);
             await Task.Delay(1000);
             var settings = desktop.Windows.OfType<SettingsWindow>().FirstOrDefault();
             Check(settings is { IsVisible: true }, "設定の画面を開く");

@@ -27,6 +27,7 @@ public partial class App : Application
 
     protected override async void OnStartup(StartupEventArgs e)
     {
+        Theme.Initialize(Resources); // 色・文字・角の丸みのデザイントークン (窓を作る前に)
         bool snapshots = e.Args.Length >= 2 && e.Args[0] == "--doc-snapshots";
         bool transcribe = e.Args.Length >= 3 && e.Args[0] == "--transcribe-file";
         bool selftest = e.Args.Length >= 4 && e.Args[0] == "--selftest-minutes";
@@ -157,6 +158,7 @@ public partial class App : Application
             _ => ThemeMode.System,
         };
         if (Current.ThemeMode != mode) Current.ThemeMode = mode;
+        Theme.Apply(theme);
     }
 
     private static void ActivateExisting()

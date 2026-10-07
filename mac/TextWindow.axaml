@@ -1,61 +1,186 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:GetText"
         x:Class="GetText.TextWindow"
         Title="GetText" Width="480" Height="600" MinWidth="360" MinHeight="260"
         Icon="avares://GetText/Assets/app.ico">
     <Window.Styles>
-        <Style Selector="Border.chip">
-            <Setter Property="Background" Value="{DynamicResource Subtle}"/>
-            <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="Padding" Value="8,1"/>
-            <Setter Property="Margin" Value="6,0,0,0"/>
+        <!-- その場で知らせる帯 -->
+        <Style Selector="Border.infoBar">
+            <Setter Property="CornerRadius" Value="{StaticResource Gt.Radius.Button}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Gt.Border}"/>
+            <Setter Property="Background" Value="{DynamicResource Gt.AccentSubtle}"/>
+            <Setter Property="Padding" Value="12,8,4,8"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+        <Style Selector="Border.infoBar.warning">
+            <Setter Property="Background" Value="{DynamicResource Gt.WarningSubtle}"/>
         </Style>
     </Window.Styles>
-    <Grid Margin="8,4,8,6" RowDefinitions="Auto,*,Auto">
-        <!-- 操作バー (窓が狭いときはボタンを 2 段に折り返す。1 段のままだと右のボタンが切れて押せない) -->
-        <Grid Grid.Row="0" Margin="0,0,0,6" ColumnDefinitions="*,Auto">
-            <Button Grid.Column="1" Classes="command" Click="Settings_Click" ToolTip.Tip="設定 (⌘,)" VerticalAlignment="Top">
-                <TextBlock Text="⚙ 設定"/>
-            </Button>
-            <WrapPanel Grid.Column="0" Orientation="Horizontal">
-            <ToggleButton x:Name="PauseToggle" Classes="command" Click="PauseToggle_Click"
-                          ToolTip.Tip="自動読み取りを一時停止 / 再開 (⌘P ・ どこからでも ⌃⌥P)">
-                <TextBlock x:Name="PauseLabel" Text="❚❚ 一時停止"/>
-            </ToggleButton>
-            <Button Classes="command" Click="Refresh_Click" ToolTip.Tip="枠の中を今すぐ読み取る (⌘R ・ どこからでも ⌃⌥R)">
-                <TextBlock Text="⟳ 今すぐ読取"/>
-            </Button>
-            <Rectangle Width="1" Height="16" Margin="6,0" VerticalAlignment="Center" Fill="{DynamicResource Divider}"/>
-            <ToggleButton x:Name="AccumulateToggle" Classes="command" Click="AccumulateToggle_Click"
-                          ToolTip.Tip="スクロールしながら読んだ内容を重複なしでつなげて集める (長い文書の取り込み用)">
-                <TextBlock Text="⇣ 蓄積"/>
-            </ToggleButton>
-            <Rectangle Width="1" Height="16" Margin="6,0" VerticalAlignment="Center" Fill="{DynamicResource Divider}"/>
-            <Button Classes="command" Click="Minutes_Click" ToolTip.Tip="アプリの音声を文字起こしして、時刻と話者つきの議事録を作る">
-                <TextBlock Text="🎙 議事録"/>
-            </Button>
-            <Button x:Name="ClearButton" Classes="command" Click="Clear_Click" ToolTip.Tip="蓄積した内容を消して集め直す" IsVisible="False">
-                <TextBlock Text="クリア"/>
-            </Button>
-            </WrapPanel>
+    <Grid Margin="8,4,8,8" RowDefinitions="Auto,Auto,*,Auto">
+        <!-- 操作バー: 読み取り (一時停止・今すぐ) | 検索・表示 | 手前に固定・その他 -->
+        <Grid Grid.Row="0" Margin="0,0,0,8" ColumnDefinitions="Auto,*,Auto">
+            <StackPanel Orientation="Horizontal">
+                <ToggleButton x:Name="PauseToggle" Classes="command" Click="PauseToggle_Click"
+                              ToolTip.Tip="自動読み取りを一時停止 / 再開 (⌘P ・ どこからでも ⌃⌥P)" AutomationProperties.Name="一時停止">
+                    <StackPanel Orientation="Horizontal">
+                        <local:GtIcon x:Name="PauseIcon" Icon="Pause"/>
+                        <TextBlock x:Name="PauseLabel" Text="一時停止" Margin="8,0,0,0" VerticalAlignment="Center" Classes="toolLabel"/>
+                    </StackPanel>
+                </ToggleButton>
+                <Button Classes="command" Click="Refresh_Click" ToolTip.Tip="枠の中を今すぐ読み取る (⌘R ・ どこからでも ⌃⌥R)" AutomationProperties.Name="今すぐ読み取る">
+                    <StackPanel Orientation="Horizontal">
+                        <local:GtIcon Icon="Refresh"/>
+                        <TextBlock Text="今すぐ読む" Margin="8,0,0,0" VerticalAlignment="Center" Classes="toolLabel"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="4,0,0,0">
+                <Rectangle Width="1" Height="16" Margin="4,0,6,0" VerticalAlignment="Center" Fill="{DynamicResource Gt.Divider}"/>
+                <ToggleButton x:Name="SearchToggle" Classes="command" Click="SearchToggle_Click"
+                              ToolTip.Tip="読み取った文字を検索 (⌘F)。見つかった所は枠の上にも印を付けます" AutomationProperties.Name="検索">
+                    <StackPanel Orientation="Horizontal">
+                        <local:GtIcon Icon="Search"/>
+                        <TextBlock Text="検索" Margin="8,0,0,0" VerticalAlignment="Center" Classes="toolLabel"/>
+                    </StackPanel>
+                </ToggleButton>
+                <Button x:Name="ViewButton" Classes="command" ToolTip.Tip="並べ方 (上から順 / 枠・まとまりごと)・訳の位置・蓄積" AutomationProperties.Name="表示">
+                    <Button.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedLeft" Opening="ViewMenu_Opening">
+                            <MenuItem x:Name="ViewTextItem" Header="上から順" ToggleType="Radio" Click="ViewText_Click"/>
+                            <MenuItem x:Name="ViewGroupsItem" Header="枠・まとまりごと" ToggleType="Radio" Click="ViewGroups_Click"
+                                      ToolTip.Tip="枠で囲まれた所・離れて並んだかたまりごとに分け、【1】【2】… の見出しを付けます (名簿・表など)"/>
+                            <Separator/>
+                            <MenuItem x:Name="LayoutBelowItem" Header="日本語訳を原文の下に" ToggleType="Radio" Click="LayoutBelow_Click"/>
+                            <MenuItem x:Name="LayoutRightItem" Header="日本語訳を原文の右に" ToggleType="Radio" Click="LayoutRight_Click"/>
+                            <Separator/>
+                            <MenuItem x:Name="AccumulateItem" Header="蓄積 (スクロールしながら集める)" ToggleType="CheckBox" Click="AccumulateItem_Click"/>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                    <StackPanel Orientation="Horizontal">
+                        <local:GtIcon Icon="Layout"/>
+                        <TextBlock Text="表示" Margin="8,0,0,0" VerticalAlignment="Center" Classes="toolLabel"/>
+                        <local:GtIcon Icon="ChevronDown" Width="10" Height="10" Margin="8,0,0,0"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <ToggleButton x:Name="PinToggle" Classes="command" Click="PinToggle_Click" ToolTip.Tip="常に手前に表示" AutomationProperties.Name="常に手前に表示">
+                    <local:GtIcon Icon="Pin"/>
+                </ToggleButton>
+                <Button x:Name="MoreButton" Classes="command" ToolTip.Tip="その他 (保存・議事録・コマンドの一覧・設定)" AutomationProperties.Name="その他">
+                    <Button.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <MenuItem Header="原文をファイルに保存…" Click="SaveOcr_Click"/>
+                            <MenuItem Header="日本語訳をファイルに保存…" Click="SaveTranslation_Click"/>
+                            <Separator/>
+                            <MenuItem Header="議事録を開く" Click="Minutes_Click"/>
+                            <MenuItem Header="コマンドの一覧…" InputGesture="Cmd+K" Click="Palette_Click"/>
+                            <MenuItem Header="設定…" InputGesture="Cmd+OemComma" Click="Settings_Click"/>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                    <local:GtIcon Icon="More"/>
+                </Button>
+            </StackPanel>
         </Grid>
 
-        <!-- 原文と日本語訳 (配置は設定で下 / 右を切り替える) -->
-        <Grid x:Name="PaneGrid" Grid.Row="1" RowDefinitions="*,0,0" ColumnDefinitions="*,0,0">
+        <!-- 知らせの帯 -->
+        <StackPanel Grid.Row="1">
+            <Border x:Name="LoadingBar" Classes="infoBar" IsVisible="False">
+                <DockPanel>
+                    <ProgressBar DockPanel.Dock="Right" IsIndeterminate="True" Width="64" Height="4" MinWidth="0" Margin="12,0" VerticalAlignment="Center"/>
+                    <local:GtIcon DockPanel.Dock="Left" Icon="Model" Foreground="{DynamicResource Gt.AccentText}" Margin="0,2,12,0" VerticalAlignment="Top"/>
+                    <StackPanel>
+                        <TextBlock Text="AI OCR を準備しています…" FontWeight="SemiBold" Foreground="{DynamicResource Gt.TextPrimary}"/>
+                        <TextBlock x:Name="LoadingDetail" Classes="caption" TextWrapping="Wrap" TextTrimming="None"
+                                   Text="認識モデルを読み込んでいます。その間は Mac の文字認識で読み取ります。"/>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+            <Border x:Name="FallbackBar" Classes="infoBar warning" IsVisible="False">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Classes="icon" VerticalAlignment="Top" Click="FallbackClose_Click" ToolTip.Tip="閉じる" AutomationProperties.Name="知らせを閉じる">
+                        <local:GtIcon Icon="Close" Width="12" Height="12"/>
+                    </Button>
+                    <Button x:Name="FallbackDetails" DockPanel.Dock="Right" Content="詳細" Margin="8,0,4,0" VerticalAlignment="Center" Click="FallbackDetails_Click"/>
+                    <local:GtIcon DockPanel.Dock="Left" Icon="Warning" Foreground="{DynamicResource Gt.Warning}" Margin="0,2,12,0" VerticalAlignment="Top"/>
+                    <StackPanel>
+                        <TextBlock Text="AI OCR を使えません" FontWeight="SemiBold" Foreground="{DynamicResource Gt.TextPrimary}"/>
+                        <TextBlock Classes="caption" Foreground="{DynamicResource Gt.TextPrimary}" TextWrapping="Wrap" TextTrimming="None"
+                                   Text="代わりに Mac の文字認識で読み取っています (しばらくしてから AI OCR をもう一度試します)。"/>
+                        <TextBlock x:Name="FallbackText" Classes="caption" TextWrapping="Wrap" TextTrimming="None" Margin="0,4,0,0" IsVisible="False"/>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+            <Border x:Name="AccumulateBar" Classes="infoBar" IsVisible="False" Padding="12,4,4,4">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Classes="command" Click="AccumulateEnd_Click" Content="終える" AutomationProperties.Name="蓄積を終える"/>
+                    <Button x:Name="ClearButton" DockPanel.Dock="Right" Classes="command" Click="Clear_Click" ToolTip.Tip="蓄積した内容を消して集め直す" AutomationProperties.Name="蓄積をクリア">
+                        <StackPanel Orientation="Horizontal">
+                            <local:GtIcon Icon="Clear" Width="14" Height="14"/>
+                            <TextBlock Text="クリア" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <local:GtIcon Icon="Accumulate" Foreground="{DynamicResource Gt.AccentText}" Margin="0,0,12,0"/>
+                    <TextBlock x:Name="AccumulateText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Gt.TextPrimary}"
+                               Text="蓄積中: スクロールすると、読んだ内容を重複なしで追記します"/>
+                </DockPanel>
+            </Border>
+        </StackPanel>
+
+        <!-- 原文と日本語訳 (配置は「表示」で下 / 右を切り替える) -->
+        <Grid x:Name="PaneGrid" Grid.Row="2" RowDefinitions="*,0,0" ColumnDefinitions="*,0,0">
             <Border x:Name="OcrCard" Classes="card">
                 <DockPanel>
                     <DockPanel DockPanel.Dock="Top" Margin="12,6,4,0">
-                        <Button DockPanel.Dock="Right" Classes="icon" Content="💾" FontSize="12" Click="SaveOcr_Click" ToolTip.Tip="ファイルに保存"/>
-                        <Button DockPanel.Dock="Right" Classes="icon" Content="⧉" Click="CopyOcr_Click"
-                                ToolTip.Tip="コピー: 選択範囲があればその部分、なければ全文 (⌘⇧C ・ どこからでも ⌃⌥C)"/>
+                        <Button DockPanel.Dock="Right" Classes="icon" Click="SaveOcr_Click" ToolTip.Tip="ファイルに保存" AutomationProperties.Name="原文をファイルに保存">
+                            <local:GtIcon Icon="Save" Width="14" Height="14"/>
+                        </Button>
+                        <Button DockPanel.Dock="Right" Classes="icon" Click="CopyOcr_Click" AutomationProperties.Name="原文をコピー"
+                                ToolTip.Tip="コピー: 選択範囲があればその部分、なければ全文 (⌘⇧C ・ どこからでも ⌃⌥C)">
+                            <local:GtIcon Icon="Copy" Width="14" Height="14"/>
+                        </Button>
                         <TextBlock Classes="title" Text="原文"/>
-                        <TextBlock x:Name="OcrNote" Classes="caption" Margin="10,0,6,0"/>
+                        <TextBlock x:Name="OcrNote" Classes="caption" Margin="12,0,8,0"/>
                     </DockPanel>
+                    <!-- 検索 (⌘F) -->
+                    <Border x:Name="SearchBar" DockPanel.Dock="Top" Margin="8,4,8,4" IsVisible="False">
+                        <TextBox x:Name="SearchBox" Watermark="原文を検索" Padding="4,4" AutomationProperties.Name="読み取った文字を検索">
+                            <TextBox.InnerLeftContent>
+                                <local:GtIcon Icon="Search" Width="14" Height="14" Foreground="{DynamicResource Gt.TextSecondary}" Margin="8,0,0,0"/>
+                            </TextBox.InnerLeftContent>
+                            <TextBox.InnerRightContent>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock x:Name="SearchCount" Classes="caption" MinWidth="40" TextAlignment="Right" Margin="4,0"/>
+                                    <Button x:Name="SearchPrevButton" Classes="icon" Click="SearchPrev_Click" ToolTip.Tip="前 (⇧return ・ ⌘⇧G)" AutomationProperties.Name="前の一致">
+                                        <local:GtIcon Icon="ArrowUp" Width="12" Height="12"/>
+                                    </Button>
+                                    <Button x:Name="SearchNextButton" Classes="icon" Click="SearchNext_Click" ToolTip.Tip="次 (return ・ ⌘G)" AutomationProperties.Name="次の一致">
+                                        <local:GtIcon Icon="ArrowDown" Width="12" Height="12"/>
+                                    </Button>
+                                    <Button Classes="icon" Click="SearchClose_Click" ToolTip.Tip="検索を閉じる (esc)" AutomationProperties.Name="検索を閉じる">
+                                        <local:GtIcon Icon="Close" Width="12" Height="12"/>
+                                    </Button>
+                                </StackPanel>
+                            </TextBox.InnerRightContent>
+                        </TextBox>
+                    </Border>
                     <Grid>
-                        <TextBox x:Name="ResultBox" Classes="result"/>
-                        <TextBlock x:Name="OcrPlaceholder" Classes="caption" Margin="14,6,14,0"
-                                   VerticalAlignment="Top" TextWrapping="Wrap" TextTrimming="None" IsHitTestVisible="False"
-                                   Text="青い枠を読み取りたい文字の上に重ねてください。枠の中の文字がここに表示されます。&#x0a;枠は上のバーで移動、右下の角でサイズ変更できます。"/>
+                        <TextBox x:Name="ResultBox" Classes="result" AutomationProperties.Name="読み取った原文"/>
+                        <!-- 検索で見つかった所の印 (原文の欄の上に重ねる) -->
+                        <Canvas x:Name="SearchLayer" IsHitTestVisible="False" ClipToBounds="True"/>
+                        <!-- 空の状態 -->
+                        <DockPanel x:Name="OcrPlaceholder" Margin="14,8,14,0" VerticalAlignment="Top" IsHitTestVisible="False">
+                            <local:GtIcon DockPanel.Dock="Left" Icon="ScreenOcr" Width="24" Height="24" Foreground="{DynamicResource Gt.TextTertiary}"
+                                          Margin="0,0,12,0" VerticalAlignment="Top"/>
+                            <StackPanel>
+                                <TextBlock x:Name="OcrEmptyTitle" Text="枠を読みたい文字の上に重ねてください" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Gt.TextPrimary}" TextWrapping="Wrap"/>
+                                <TextBlock x:Name="OcrEmptyDetail" Classes="caption" TextWrapping="Wrap" TextTrimming="None" Margin="0,4,0,0"
+                                           Text="枠の中の文字がここに表示されます。枠は上のバーで移動、右下の角でサイズを変えられます。"/>
+                            </StackPanel>
+                        </DockPanel>
                     </Grid>
                 </DockPanel>
             </Border>
@@ -65,15 +190,19 @@
             <Border x:Name="TranslationCard" Classes="card" IsVisible="False">
                 <DockPanel>
                     <DockPanel DockPanel.Dock="Top" Margin="12,6,4,0">
-                        <Button DockPanel.Dock="Right" Classes="icon" Content="💾" FontSize="12" Click="SaveTranslation_Click" ToolTip.Tip="ファイルに保存"/>
-                        <Button DockPanel.Dock="Right" Classes="icon" Content="⧉" Click="CopyTranslation_Click"
-                                ToolTip.Tip="コピー: 選択範囲があればその部分、なければ全文 (⌘⇧T ・ どこからでも ⌃⌥T)"/>
+                        <Button DockPanel.Dock="Right" Classes="icon" Click="SaveTranslation_Click" ToolTip.Tip="ファイルに保存" AutomationProperties.Name="日本語訳をファイルに保存">
+                            <local:GtIcon Icon="Save" Width="14" Height="14"/>
+                        </Button>
+                        <Button DockPanel.Dock="Right" Classes="icon" Click="CopyTranslation_Click" AutomationProperties.Name="日本語訳をコピー"
+                                ToolTip.Tip="コピー: 選択範囲があればその部分、なければ全文 (⌘⇧T ・ どこからでも ⌃⌥T)">
+                            <local:GtIcon Icon="Copy" Width="14" Height="14"/>
+                        </Button>
                         <TextBlock Classes="title" Text="日本語訳"/>
-                        <TextBlock x:Name="TranslationNote" Classes="caption" Margin="10,0,6,0"/>
+                        <TextBlock x:Name="TranslationNote" Classes="caption" Margin="12,0,8,0"/>
                     </DockPanel>
                     <Grid>
-                        <TextBox x:Name="TranslationBox" Classes="result"/>
-                        <TextBlock x:Name="TranslationPlaceholder" Classes="caption" Margin="14,6,14,0"
+                        <TextBox x:Name="TranslationBox" Classes="result" AutomationProperties.Name="日本語訳"/>
+                        <TextBlock x:Name="TranslationPlaceholder" Classes="caption" Margin="14,8,14,0"
                                    VerticalAlignment="Top" TextWrapping="Wrap" TextTrimming="None" IsHitTestVisible="False"
                                    Text="英語・中国語・韓国語などの文があると、ここに日本語訳が表示されます。"/>
                     </Grid>
@@ -81,15 +210,14 @@
             </Border>
         </Grid>
 
-        <!-- ステータスバー -->
-        <DockPanel Grid.Row="2" Margin="4,6,0,0">
+        <!-- ステータスバー: 状態 (左) と、読み取り・翻訳の方式 (右。詳しくはマウスを乗せると出る) -->
+        <DockPanel Grid.Row="3" Margin="4,8,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                <Border Classes="chip" ToolTip.Tip="文字の読み取り方式">
-                    <TextBlock x:Name="OcrChip" Classes="caption"/>
-                </Border>
-                <Border x:Name="TranslationChipBorder" Classes="chip" ToolTip.Tip="翻訳エンジン">
+                <TextBlock x:Name="OcrChip" Classes="caption" Margin="12,0,0,0" ToolTip.Tip="読み取りの方式"/>
+                <StackPanel x:Name="TranslationChipBorder" Orientation="Horizontal" Margin="12,0,0,0" ToolTip.Tip="翻訳の方式">
+                    <local:GtIcon x:Name="TranslationPlaceIcon" Icon="Local" Width="12" Height="12" Foreground="{DynamicResource Gt.TextSecondary}" Margin="0,0,4,0"/>
                     <TextBlock x:Name="TranslationChip" Classes="caption"/>
-                </Border>
+                </StackPanel>
             </StackPanel>
             <TextBlock x:Name="StatusText" Classes="caption"/>
         </DockPanel>

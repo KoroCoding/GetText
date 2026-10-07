@@ -473,7 +473,7 @@
                     </Button>
                     <Button x:Name="NoticeAction" DockPanel.Dock="Right" IsVisible="False" Padding="12,3" Margin="8,0,4,0"
                             VerticalAlignment="Center" Click="NoticeAction_Click"/>
-                    <TextBlock x:Name="NoticeIcon" DockPanel.Dock="Left" FontSize="13" Margin="0,1,10,0" VerticalAlignment="Top"/>
+                    <local:GtIcon x:Name="NoticeIcon" DockPanel.Dock="Left" Margin="0,1,10,0" VerticalAlignment="Top"/>
                     <TextBlock x:Name="NoticeText" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource Text1}"/>
                 </DockPanel>
             </Border>

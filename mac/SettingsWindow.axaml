@@ -1,338 +1,558 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:GetText"
         x:Class="GetText.SettingsWindow"
-        Title="GetText の設定" Width="760" Height="600" MinWidth="680" MinHeight="420"
+        Title="GetText の設定" Width="860" Height="620" MinWidth="640" MinHeight="420"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Icon="avares://GetText/Assets/app.ico">
     <Window.Styles>
         <Style Selector="Border.row">
-            <Setter Property="Background" Value="{DynamicResource CardBg}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource CardStroke}"/>
+            <Setter Property="Background" Value="{DynamicResource Gt.Surface}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Gt.Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="Padding" Value="14,10"/>
+            <Setter Property="CornerRadius" Value="{StaticResource Gt.Radius.Button}"/>
+            <Setter Property="Padding" Value="16,12"/>
             <Setter Property="Margin" Value="0,0,0,4"/>
         </Style>
         <Style Selector="TextBlock.label">
-            <Setter Property="Foreground" Value="{DynamicResource Text1}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Gt.TextPrimary}"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
         <Style Selector="TextBlock.desc">
-            <Setter Property="Foreground" Value="{DynamicResource Text2}"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource Gt.TextSecondary}"/>
+            <Setter Property="FontSize" Value="{StaticResource Gt.Font.Caption}"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
             <Setter Property="Margin" Value="0,2,0,0"/>
         </Style>
         <Style Selector="ComboBox.rowCombo">
             <Setter Property="MinWidth" Value="200"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="Margin" Value="12,0,0,0"/>
+            <Setter Property="Margin" Value="16,0,0,0"/>
         </Style>
         <Style Selector="CheckBox.rowCheck, ToggleSwitch.rowCheck">
             <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="Margin" Value="12,0,0,0"/>
+            <Setter Property="Margin" Value="16,0,0,0"/>
             <Setter Property="MinWidth" Value="0"/>
         </Style>
-        <Style Selector="TabControl#Tabs > TabItem">
-            <Setter Property="FontSize" Value="15"/>
-            <Setter Property="MinHeight" Value="38"/>
-            <Setter Property="Padding" Value="12,4"/>
+        <Style Selector="Button.rowAction">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="16,0,0,0"/>
         </Style>
-        <Style Selector="ScrollViewer.page">
-            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
-            <Setter Property="Padding" Value="4,0,12,12"/>
+        <Style Selector="TextBlock.navGroup">
+            <Setter Property="FontSize" Value="{StaticResource Gt.Font.Caption}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource Gt.TextSecondary}"/>
+            <Setter Property="Margin" Value="12,16,0,4"/>
+        </Style>
+        <!-- 左のメニュー: 選んでいるものは背景と左の印で示す (色だけに頼らない) -->
+        <Style Selector="RadioButton.nav">
+            <Setter Property="GroupName" Value="SettingsNav"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Panel>
+                        <Border x:Name="Bg" Background="Transparent" CornerRadius="{StaticResource Gt.Radius.Button}"/>
+                        <Border x:Name="Mark" Width="3" CornerRadius="2" Margin="0,8" HorizontalAlignment="Left" Background="{DynamicResource Gt.Accent}" IsVisible="False"/>
+                        <ContentPresenter Margin="12,6" Content="{TemplateBinding Content}" Foreground="{DynamicResource Gt.TextPrimary}"/>
+                    </Panel>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="RadioButton.nav:pointerover /template/ Border#Bg">
+            <Setter Property="Background" Value="{DynamicResource Gt.SubtleHover}"/>
+        </Style>
+        <Style Selector="RadioButton.nav:checked /template/ Border#Bg">
+            <Setter Property="Background" Value="{DynamicResource Gt.AccentSubtle}"/>
+        </Style>
+        <Style Selector="RadioButton.nav:checked /template/ Border#Mark">
+            <Setter Property="IsVisible" Value="True"/>
+        </Style>
+        <Style Selector="StackPanel.page">
+            <Setter Property="IsVisible" Value="False"/>
+            <Setter Property="Margin" Value="0,0,0,24"/>
+        </Style>
+        <Style Selector="Border.pill">
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="Margin" Value="16,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
     </Window.Styles>
 
-    <TabControl x:Name="Tabs" Margin="4,8,8,8" TabStripPlacement="Left">
-        <!-- ───────── 読み取り ───────── -->
-        <TabItem Header="読み取り">
-            <ScrollViewer Classes="page">
-                <StackPanel>
-                    <TextBlock Classes="settingHeader" Text="文字の読み取り"/>
-                    <Border Classes="row">
+    <Grid ColumnDefinitions="232,*">
+        <!-- 左: 検索とページ -->
+        <DockPanel Margin="12,16,8,12">
+            <TextBox x:Name="SettingSearch" DockPanel.Dock="Top" Margin="0,0,0,8" Watermark="設定を検索" AutomationProperties.Name="設定を検索">
+                <TextBox.InnerLeftContent>
+                    <local:GtIcon Icon="Search" Width="14" Height="14" Margin="8,0,0,0" Foreground="{DynamicResource Gt.TextSecondary}"/>
+                </TextBox.InnerLeftContent>
+            </TextBox>
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="NavPanel">
+                    <TextBlock Classes="navGroup" Text="一般"/>
+                    <RadioButton x:Name="NavAppearance" Classes="nav" Tag="Appearance" IsCheckedChanged="Nav_Checked">
+                        <StackPanel Orientation="Horizontal"><local:GtIcon Icon="Appearance" Margin="0,0,10,0"/><TextBlock Text="外観"/></StackPanel>
+                    </RadioButton>
+                    <RadioButton Classes="nav" Tag="Shortcuts" IsCheckedChanged="Nav_Checked">
+                        <StackPanel Orientation="Horizontal"><local:GtIcon Icon="Keyboard" Margin="0,0,10,0"/><TextBlock Text="ショートカット"/></StackPanel>
+                    </RadioButton>
+                    <RadioButton Classes="nav" Tag="Privacy" IsCheckedChanged="Nav_Checked">
+                        <StackPanel Orientation="Horizontal"><local:GtIcon Icon="Privacy" Margin="0,0,10,0"/><TextBlock Text="プライバシー"/></StackPanel>
+                    </RadioButton>
+                    <TextBlock Classes="navGroup" Text="機能"/>
+                    <RadioButton Classes="nav" Tag="ScreenOcr" IsCheckedChanged="Nav_Checked">
+                        <StackPanel Orientation="Horizontal"><local:GtIcon Icon="ScreenOcr" Margin="0,0,10,0"/><TextBlock Text="文字の読み取り"/></StackPanel>
+                    </RadioButton>
+                    <RadioButton Classes="nav" Tag="Translation" IsCheckedChanged="Nav_Checked">
+                        <StackPanel Orientation="Horizontal"><local:GtIcon Icon="Translate" Margin="0,0,10,0"/><TextBlock Text="翻訳"/></StackPanel>
+                    </RadioButton>
+                    <RadioButton Classes="nav" Tag="Meetings" IsCheckedChanged="Nav_Checked">
+                        <StackPanel Orientation="Horizontal"><local:GtIcon Icon="Meeting" Margin="0,0,10,0"/><TextBlock Text="議事録"/></StackPanel>
+                    </RadioButton>
+                    <RadioButton Classes="nav" Tag="Recording" IsCheckedChanged="Nav_Checked">
+                        <StackPanel Orientation="Horizontal"><local:GtIcon Icon="Recording" Margin="0,0,10,0"/><TextBlock Text="画面の録画"/></StackPanel>
+                    </RadioButton>
+                    <TextBlock Classes="navGroup" Text="拡張"/>
+                    <RadioButton Classes="nav" Tag="Models" IsCheckedChanged="Nav_Checked">
                         <DockPanel>
-                            <ComboBox x:Name="OcrEngineBox" DockPanel.Dock="Right" Classes="rowCombo" MinWidth="260"
-                                      SelectionChanged="OcrEngineBox_SelectionChanged"/>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="文字の読み取り方式"/>
-                                <TextBlock Classes="desc" Text="Mac の文字認識 (Vision) は追加のインストール不要で、日本語・英語・中国語・韓国語を読めます。AI はセットアップすると使え、記号や表に強くなります。"/>
-                            </StackPanel>
+                            <Border x:Name="ModelsBadge" DockPanel.Dock="Right" CornerRadius="10" Padding="6,0" Margin="8,0,0,0"
+                                    Background="{DynamicResource Gt.AccentSubtle}" IsVisible="False">
+                                <TextBlock Text="未設定" FontSize="{StaticResource Gt.Font.Caption}" Foreground="{DynamicResource Gt.AccentText}"/>
+                            </Border>
+                            <StackPanel Orientation="Horizontal"><local:GtIcon Icon="Model" Margin="0,0,10,0"/><TextBlock Text="モデルとセットアップ"/></StackPanel>
                         </DockPanel>
-                    </Border>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <ComboBox x:Name="IntervalBox" DockPanel.Dock="Right" Classes="rowCombo" MinWidth="120"
-                                      SelectionChanged="IntervalBox_SelectionChanged"/>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="読み取りの間隔"/>
-                                <TextBlock Classes="desc" Text="画面に変化がないときは読み取りを省くので、短くしても負荷はあまり増えません。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <ToggleSwitch x:Name="JoinCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="JoinCheck_Click"/>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="和文の文字間の空白を詰める"/>
-                                <TextBlock Classes="desc" Text="「日 本 語」のように 1 文字ずつ空いてしまうのを「日本語」にします。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
+                    </RadioButton>
+                    <TextBlock Classes="navGroup" Text="詳細"/>
+                    <RadioButton Classes="nav" Tag="Diagnostics" IsCheckedChanged="Nav_Checked">
+                        <StackPanel Orientation="Horizontal"><local:GtIcon Icon="Diagnostics" Margin="0,0,10,0"/><TextBlock Text="診断"/></StackPanel>
+                    </RadioButton>
                 </StackPanel>
             </ScrollViewer>
-        </TabItem>
+        </DockPanel>
 
-        <!-- ───────── 翻訳 ───────── -->
-        <TabItem Header="翻訳">
-            <ScrollViewer Classes="page">
-                <StackPanel>
-                    <TextBlock Classes="settingHeader" Text="日本語訳"/>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <ToggleSwitch x:Name="TranslateCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="TranslateCheck_Click"/>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="外国語の文を日本語に翻訳して表示する"/>
-                                <TextBlock Classes="desc" Text="日本語の行はそのまま表示し、外国語と判定した文だけを翻訳します。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <ComboBox x:Name="EngineBox" DockPanel.Dock="Right" Classes="rowCombo" MinWidth="250"
-                                      SelectionChanged="EngineBox_SelectionChanged"/>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="翻訳エンジン"/>
-                                <TextBlock x:Name="EngineDescription" Classes="desc"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border x:Name="DeepLRow" Classes="row">
-                        <DockPanel>
-                            <Button DockPanel.Dock="Right" Content="キーを設定…" Margin="12,0,0,0" VerticalAlignment="Center" Click="KeyButton_Click"/>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="DeepL API キー"/>
-                                <TextBlock x:Name="KeyStatus" Classes="desc"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
-        </TabItem>
-
-        <!-- ───────── 表示 ───────── -->
-        <TabItem Header="表示">
-            <ScrollViewer Classes="page">
-                <StackPanel>
-                    <TextBlock Classes="settingHeader" Text="見た目"/>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <ComboBox x:Name="ThemeBox" DockPanel.Dock="Right" Classes="rowCombo" SelectionChanged="ThemeBox_SelectionChanged"/>
-                            <TextBlock Classes="label" Text="テーマ" VerticalAlignment="Center"/>
-                        </DockPanel>
-                    </Border>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <ComboBox x:Name="LayoutBox" DockPanel.Dock="Right" Classes="rowCombo" MinWidth="140" SelectionChanged="LayoutBox_SelectionChanged"/>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="日本語訳の位置"/>
-                                <TextBlock Classes="desc" Text="横長のウィンドウでは「右」が見やすくなります。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
-                                <Slider x:Name="FontSlider" Width="160" Minimum="9" Maximum="40" SmallChange="1" LargeChange="2"
-                                        IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center" ValueChanged="FontSlider_ValueChanged"/>
-                                <TextBlock x:Name="FontValue" Width="44" TextAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource Text2}"/>
-                            </StackPanel>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="文字の大きさ"/>
-                                <TextBlock Classes="desc" Text="欄の上で ⌘ + スクロールでも変えられます。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <ToggleSwitch x:Name="WrapCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="WrapCheck_Click"/>
-                            <TextBlock Classes="label" Text="長い行を折り返す" VerticalAlignment="Center"/>
-                        </DockPanel>
-                    </Border>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <ComboBox x:Name="ConvertBox" DockPanel.Dock="Right" Classes="rowCombo" MinWidth="160" SelectionChanged="ConvertBox_SelectionChanged"/>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="文字変換"/>
-                                <TextBlock Classes="desc" Text="表示とコピーする文字を変換します。欄の右クリックメニューからも切り替えられます。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <TextBlock Classes="settingHeader" Text="ウィンドウ"/>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <ToggleSwitch x:Name="TopmostCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="TopmostCheck_Click"/>
-                            <TextBlock Classes="label" Text="常に手前に表示する" VerticalAlignment="Center"/>
-                        </DockPanel>
-                    </Border>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <ToggleSwitch x:Name="FollowCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="FollowCheck_Click"/>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="読み取り枠の右側について行く"/>
-                                <TextBlock Classes="desc" Text="枠を動かすと、このウィンドウも枠の隣に移動します。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
-        </TabItem>
-
-        <!-- ───────── 議事録 ───────── -->
-        <TabItem Header="議事録">
-            <ScrollViewer Classes="page">
-                <StackPanel>
-                    <TextBlock Classes="settingHeader" Text="議事録"/>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
-                                <Slider x:Name="MinutesFontSlider" Width="160" Minimum="9" Maximum="40" SmallChange="1" LargeChange="2"
-                                        IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center" ValueChanged="MinutesFontSlider_ValueChanged"/>
-                                <TextBlock x:Name="MinutesFontValue" Width="44" TextAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource Text2}"/>
-                            </StackPanel>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="議事録の文字の大きさ"/>
-                                <TextBlock Classes="desc" Text="議事録の発言の文字です。議事録の画面で ⌘ + スクロール、または ⌘ と +・−・0 でも変えられます。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <ToggleSwitch x:Name="MinutesTimeCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="MinutesDisplay_Click"/>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="発言の時刻を表示する"/>
-                                <TextBlock Classes="desc" Text="発言の時刻 (ファイルでは先頭からの時間) を表示し、コピー・保存にも含めます。議事録の画面の「表示」でも変えられます。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <ToggleSwitch x:Name="MinutesTranslateCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="MinutesDisplay_Click"/>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="日本語以外の発言に日本語訳を付ける"/>
-                                <TextBlock Classes="desc" Text="英語などの発言の下に日本語訳を出し、コピー・保存にも含めます (Mac の中で訳します)。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <ToggleSwitch x:Name="MinutesFillerCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="MinutesDisplay_Click"/>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="相づちを除く"/>
-                                <TextBlock Classes="desc" Text="「はい」「なるほど」「えーと」などだけの発言を、画面とコピー・保存から除きます (隠すだけなので、外すと戻ります)。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <ToggleSwitch x:Name="MinutesScrollCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="MinutesDisplay_Click"/>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="自動スクロール"/>
-                                <TextBlock Classes="desc" Text="新しい発言が加わるたびに、いちばん下 (最新) までスクロールします。発言を書き直している間は止まります。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <ToggleSwitch x:Name="MinutesAiTranslateCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="MinutesAiTranslate_Click"/>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="日本語訳を AI で作る (前後の発言と用語を使う)"/>
-                                <TextBlock Classes="desc" Text="英語などの発言を、文脈による補正と同じ AI (Mac 内) が、直前の発言の流れと登録した用語を見て訳します。製品名などの取り違えが減りますが、翻訳モデルより時間がかかります。AI が使えないときは翻訳モデルで訳します。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <ToggleSwitch x:Name="MinutesVoicesCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="MinutesVoices_Click"/>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="名前を付けた話者の声を覚える"/>
-                                <TextBlock Classes="desc" Text="話者に名前を付けると声の特徴を覚え、次の会議から似た声の話者に自動で名前を付けます。覚えるのは声の特徴 (数値) だけで、音声は保存しません。"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <TextBlock Classes="settingHeader" Text="Mac の許可"/>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Button Content="画面収録の設定を開く" Margin="12,0,0,0" Click="OpenScreenPrivacy_Click"/>
-                                <Button Content="マイクの設定を開く" Margin="8,0,0,0" Click="OpenMicPrivacy_Click"/>
-                            </StackPanel>
-                            <StackPanel>
-                                <TextBlock Classes="label" Text="画面収録とシステムオーディオ録音・マイク"/>
-                                <TextBlock x:Name="PermissionStatus" Classes="desc"/>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
-        </TabItem>
-
-        <!-- ───────── ショートカット ───────── -->
-        <TabItem Header="ショートカット">
-            <ScrollViewer Classes="page">
-                <StackPanel x:Name="ShortcutList">
-                    <TextBlock Classes="settingHeader" Text="どのアプリを使っていても効くキー"/>
-                    <TextBlock Classes="settingHeader" Text="GetText のウィンドウで使うキー" x:Name="LocalShortcutHeader"/>
-                </StackPanel>
-            </ScrollViewer>
-        </TabItem>
-
-        <!-- ───────── 情報 ───────── -->
-        <TabItem Header="情報">
-            <ScrollViewer Classes="page">
-                <StackPanel>
-                    <TextBlock Classes="settingHeader" Text="状態"/>
-                    <Border Classes="row">
-                        <StackPanel>
-                            <TextBlock Classes="label" Text="AI OCR (RapidOCR + PP-OCRv6 small, Apache-2.0)"/>
-                            <TextBlock x:Name="AiOcrStatus" Classes="desc"/>
+        <!-- 右: ページ -->
+        <DockPanel Grid.Column="1">
+            <TextBlock x:Name="PageTitleText" DockPanel.Dock="Top" FontSize="{StaticResource Gt.Font.Title}" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Gt.TextPrimary}" Margin="16,16,24,8" Text="外観"/>
+            <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" Padding="16,0,24,0">
+                <Panel x:Name="Pages">
+                    <!-- 検索の結果 -->
+                    <StackPanel x:Name="SearchResults" Classes="page">
+                        <ItemsControl x:Name="SearchResultList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="local:SettingHit">
+                                    <Button Classes="command" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="SearchResult_Click"
+                                            Margin="0,0,0,2" Padding="12,8" AutomationProperties.Name="{Binding Label}">
+                                        <DockPanel>
+                                            <local:GtIcon DockPanel.Dock="Right" Icon="ChevronRight" Width="12" Height="12" Foreground="{DynamicResource Gt.TextTertiary}"/>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Gt.TextPrimary}" TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding Where}" Classes="caption"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <StackPanel x:Name="SearchEmpty" Margin="0,24" IsVisible="False">
+                            <TextBlock Text="見つかりませんでした" FontWeight="SemiBold" Foreground="{DynamicResource Gt.TextPrimary}"/>
+                            <TextBlock Classes="caption" Text="別の言葉で探すか、左の一覧から選んでください。" Margin="0,4,0,0"/>
                         </StackPanel>
-                    </Border>
-                    <Border Classes="row">
-                        <StackPanel>
-                            <TextBlock Classes="label" Text="ローカル翻訳 (CTranslate2)"/>
-                            <TextBlock Classes="desc" Text="英語: FuguMT (CC BY-SA 4.0) ・ その他の言語: NLLB-200 1.3B (CC BY-NC 4.0・非商用)"/>
-                            <TextBlock x:Name="LocalTranslationStatus" Classes="desc"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Classes="row">
-                        <StackPanel>
-                            <TextBlock Classes="label" Text="議事録 (音声の文字起こし)"/>
-                            <TextBlock Classes="desc" Text="音声認識: kotoba-whisper v2.0 (日本語, MIT)・Whisper large-v3 turbo (英語など, MIT) ・ 話者の聞き分け: 3D-Speaker CAM++ (Apache-2.0) ・ 無音検出: Silero VAD (MIT) ・ 文脈補正: Qwen3-4B-Instruct-2507 (Apache-2.0)"/>
-                            <TextBlock x:Name="MinutesStatus" Classes="desc"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Classes="row">
-                        <DockPanel>
-                            <Button DockPanel.Dock="Right" Content="セットアップを実行" Margin="12,0,0,0" VerticalAlignment="Center" Click="Setup_Click"/>
+                    </StackPanel>
+
+                    <!-- 外観 -->
+                    <StackPanel Classes="page" Tag="Appearance">
+                        <Border Classes="row">
+                            <DockPanel>
+                                <ComboBox x:Name="ThemeBox" DockPanel.Dock="Right" Classes="rowCombo" SelectionChanged="ThemeBox_SelectionChanged" AutomationProperties.Name="テーマ"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="テーマ"/>
+                                    <TextBlock Classes="desc" Text="ライト・ダーク、または Mac の設定に合わせます。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                                    <Slider x:Name="FontSlider" Width="160" Minimum="9" Maximum="40" SmallChange="1" LargeChange="2"
+                                            IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center" ValueChanged="FontSlider_ValueChanged"
+                                            AutomationProperties.Name="読み取った文字の大きさ"/>
+                                    <TextBlock x:Name="FontValue" Width="48" TextAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource Gt.TextSecondary}"/>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="読み取った文字の大きさ"/>
+                                    <TextBlock Classes="desc" Text="欄の上で ⌘ + スクロールでも変えられます。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                                    <Slider x:Name="MinutesFontSlider" Width="160" Minimum="9" Maximum="40" SmallChange="1" LargeChange="2"
+                                            IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center" ValueChanged="MinutesFontSlider_ValueChanged"
+                                            AutomationProperties.Name="議事録の文字の大きさ"/>
+                                    <TextBlock x:Name="MinutesFontValue" Width="48" TextAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource Gt.TextSecondary}"/>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="議事録の文字の大きさ"/>
+                                    <TextBlock Classes="desc" Text="議事録の画面で ⌘ + スクロール、⌘ と +・−・0 でも変えられます。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <TextBlock Classes="settingHeader" Text="ホーム"/>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <ToggleSwitch x:Name="HomeMinimizeCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="HomeMinimize_Click"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="機能を開いたらホームをしまう"/>
+                                    <TextBlock Classes="desc" Text="機能をすべて閉じると、ホームが戻ります。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- ショートカット -->
+                    <StackPanel x:Name="ShortcutList" Classes="page" Tag="Shortcuts">
+                        <TextBlock Classes="settingHeader" Text="どのアプリを使っていても効くキー" Margin="0,0,0,8"/>
+                        <TextBlock Classes="settingHeader" Text="GetText のウィンドウで使うキー" x:Name="LocalShortcutHeader"/>
+                    </StackPanel>
+
+                    <!-- プライバシー -->
+                    <StackPanel Classes="page" Tag="Privacy">
+                        <TextBlock Classes="desc" Margin="0,0,0,12"
+                                   Text="GetText はアカウント不要で、使い方の情報 (テレメトリー) も送りません。インターネットに送るのは、下の「オンライン」の印があるものだけです。"/>
+                        <ItemsControl x:Name="PrivacyList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="local:PrivacyRow">
+                                    <Border Classes="row">
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Classes="rowAction" Content="{Binding ActionLabel}" Tag="{Binding Page}" Click="PrivacyAction_Click"
+                                                    IsVisible="{Binding HasAction}"/>
+                                            <Border DockPanel.Dock="Right" Classes="pill" Background="{Binding PillBackground}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <local:GtIcon Icon="{Binding PillIcon}" Width="12" Height="12" Foreground="{Binding PillForeground}" Margin="0,0,6,0"/>
+                                                    <TextBlock Text="{Binding PillText}" FontSize="{StaticResource Gt.Font.Caption}" Foreground="{Binding PillForeground}"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <StackPanel>
+                                                <TextBlock Classes="label" Text="{Binding Label}"/>
+                                                <TextBlock Classes="desc" Text="{Binding Description}"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Classes="settingHeader" Text="Mac の許可"/>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Classes="rowAction" Content="画面収録" Click="OpenScreenPrivacy_Click"/>
+                                    <Button Content="マイク" Margin="8,0,0,0" VerticalAlignment="Center" Click="OpenMicPrivacy_Click"/>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="画面収録とシステムオーディオ録音・マイク"/>
+                                    <TextBlock x:Name="PermissionStatus" Classes="desc"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- 文字の読み取り -->
+                    <StackPanel Classes="page" Tag="ScreenOcr">
+                        <Border Classes="row">
+                            <DockPanel>
+                                <ComboBox x:Name="OcrEngineBox" DockPanel.Dock="Right" Classes="rowCombo" MinWidth="260" SelectionChanged="OcrEngineBox_SelectionChanged"
+                                          AutomationProperties.Name="読み取り方式"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="読み取り方式"/>
+                                    <TextBlock Classes="desc" Text="Mac の文字認識 (Vision) は追加のインストール不要です。AI はセットアップすると使え、記号や表に強くなります。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <ComboBox x:Name="OcrViewBox" DockPanel.Dock="Right" Classes="rowCombo" MinWidth="180" SelectionChanged="OcrViewBox_SelectionChanged"
+                                          AutomationProperties.Name="並べ方"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="並べ方"/>
+                                    <TextBlock Classes="desc" Text="「枠・まとまりごと」は、名簿や表のように枠で区切られた文字を枠ごとに分けて【1】【2】… の見出しを付けます。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <ComboBox x:Name="LayoutBox" DockPanel.Dock="Right" Classes="rowCombo" MinWidth="140" SelectionChanged="LayoutBox_SelectionChanged"
+                                          AutomationProperties.Name="日本語訳の位置"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="日本語訳の位置"/>
+                                    <TextBlock Classes="desc" Text="横長のウィンドウでは「右」が見やすくなります。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <ToggleSwitch x:Name="TopmostCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="TopmostCheck_Click"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="常に手前に表示する"/>
+                                    <TextBlock Classes="desc" Text="読み取りの画面の操作バーのピンでも切り替えられます。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <ToggleSwitch x:Name="FollowCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="FollowCheck_Click"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="読み取り枠の右側について行く"/>
+                                    <TextBlock Classes="desc" Text="枠を動かすと、読み取りの画面も枠の隣に移動します。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <ToggleSwitch x:Name="WrapCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="WrapCheck_Click"/>
+                                <TextBlock Classes="label" Text="長い行を折り返す" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Border>
+                        <Expander x:Name="OcrDetails" Header="詳細設定" Margin="0,16,0,0" HorizontalAlignment="Stretch">
                             <StackPanel>
-                                <TextBlock Classes="label" Text="AI OCR・ローカル翻訳・議事録のセットアップ"/>
-                                <TextBlock Classes="desc" Text="ターミナルが開き、Python 3.11 の環境と AI のモデル (約 9GB、取得済みの分は省略) を用意します。Python 3.11 が無いときは、入れ方を案内します。"/>
+                                <Border Classes="row">
+                                    <DockPanel>
+                                        <ComboBox x:Name="IntervalBox" DockPanel.Dock="Right" Classes="rowCombo" MinWidth="120" SelectionChanged="IntervalBox_SelectionChanged"
+                                                  AutomationProperties.Name="読み取りの間隔"/>
+                                        <StackPanel>
+                                            <TextBlock Classes="label" Text="読み取りの間隔"/>
+                                            <TextBlock Classes="desc" Text="画面に変化がないときは読み取りを省くので、短くしても負荷はあまり増えません。"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                                <Border Classes="row">
+                                    <DockPanel>
+                                        <ToggleSwitch x:Name="JoinCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="JoinCheck_Click"/>
+                                        <StackPanel>
+                                            <TextBlock Classes="label" Text="和文の文字間の空白を詰める"/>
+                                            <TextBlock Classes="desc" Text="「日 本 語」のように 1 文字ずつ空いてしまうのを「日本語」にします。"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
+                                <Border Classes="row">
+                                    <DockPanel>
+                                        <ComboBox x:Name="ConvertBox" DockPanel.Dock="Right" Classes="rowCombo" MinWidth="160" SelectionChanged="ConvertBox_SelectionChanged"
+                                                  AutomationProperties.Name="文字変換"/>
+                                        <StackPanel>
+                                            <TextBlock Classes="label" Text="文字変換"/>
+                                            <TextBlock Classes="desc" Text="表示とコピーする文字を変換します。欄の右クリックメニューからも切り替えられます。"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Border>
                             </StackPanel>
-                        </DockPanel>
-                    </Border>
-                    <TextBlock Classes="settingHeader" Text="フォルダ"/>
-                    <Border Classes="row">
-                        <WrapPanel>
-                            <Button Content="設定フォルダを開く" Margin="0,0,8,0" Click="OpenSettingsFolder_Click"/>
-                            <Button Content="ログフォルダを開く" Margin="0,0,8,0" Click="OpenLogFolder_Click"/>
-                            <Button Content="議事録のフォルダを開く" Margin="0,0,8,0" Click="OpenMinutesFolder_Click"/>
-                            <Button Content="モデルのフォルダを開く" Click="OpenModelFolder_Click"/>
-                        </WrapPanel>
-                    </Border>
-                    <TextBlock x:Name="VersionText" Classes="desc" Margin="2,12,0,0"/>
-                </StackPanel>
+                        </Expander>
+                    </StackPanel>
+
+                    <!-- 翻訳 -->
+                    <StackPanel Classes="page" Tag="Translation">
+                        <Border Classes="row">
+                            <DockPanel>
+                                <ToggleSwitch x:Name="TranslateCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="TranslateCheck_Click"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="外国語の文を日本語に翻訳して表示する"/>
+                                    <TextBlock Classes="desc" Text="日本語の行はそのまま表示し、外国語と判定した文だけを翻訳します。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <ComboBox x:Name="EngineBox" DockPanel.Dock="Right" Classes="rowCombo" MinWidth="250" SelectionChanged="EngineBox_SelectionChanged"
+                                          AutomationProperties.Name="翻訳エンジン"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="翻訳エンジン"/>
+                                    <TextBlock x:Name="EngineDescription" Classes="desc"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border x:Name="DeepLRow" Classes="row">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Classes="rowAction" Content="キーを設定…" Click="KeyButton_Click"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="DeepL API キー"/>
+                                    <TextBlock x:Name="KeyStatus" Classes="desc"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- 議事録 -->
+                    <StackPanel Classes="page" Tag="Meetings">
+                        <Border Classes="row">
+                            <DockPanel>
+                                <ToggleSwitch x:Name="MinutesTimeCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="MinutesDisplay_Click"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="発言の時刻を表示する"/>
+                                    <TextBlock Classes="desc" Text="コピー・保存にも含めます。議事録の画面の「表示」でも変えられます。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <ToggleSwitch x:Name="MinutesTranslateCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="MinutesDisplay_Click"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="日本語以外の発言に日本語訳を付ける"/>
+                                    <TextBlock Classes="desc" Text="英語などの発言の下に日本語訳を出します (Mac の中で訳します)。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <ToggleSwitch x:Name="MinutesFillerCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="MinutesDisplay_Click"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="相づちを除く"/>
+                                    <TextBlock Classes="desc" Text="「はい」「えーと」などだけの発言を隠します (外すと戻ります)。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <ToggleSwitch x:Name="MinutesScrollCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="MinutesDisplay_Click"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="自動スクロール"/>
+                                    <TextBlock Classes="desc" Text="新しい発言が加わるたびに最新までスクロールします。書き直している間は止まります。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <ToggleSwitch x:Name="MinutesVoicesCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="MinutesVoices_Click"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="名前を付けた話者の声を覚える"/>
+                                    <TextBlock Classes="desc" Text="次の会議から似た声の話者に自動で名前を付けます。覚えるのは声の特徴 (数値) だけで、音声は保存しません。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Expander Header="詳細設定" Margin="0,16,0,0" HorizontalAlignment="Stretch">
+                            <Border Classes="row">
+                                <DockPanel>
+                                    <ToggleSwitch x:Name="MinutesAiTranslateCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="MinutesAiTranslate_Click"/>
+                                    <StackPanel>
+                                        <TextBlock Classes="label" Text="日本語訳を AI で作る (前後の発言と用語を使う)"/>
+                                        <TextBlock Classes="desc" Text="文脈による補正と同じ AI (Mac 内) が、直前の発言と登録した用語を見て訳します。取り違えが減りますが、時間がかかります。"/>
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+                        </Expander>
+                    </StackPanel>
+
+                    <!-- 画面の録画 -->
+                    <StackPanel Classes="page" Tag="Recording">
+                        <Border Classes="row">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Classes="rowAction" Content="変更…" Click="RecordFolderChange_Click"/>
+                                    <Button Content="開く" Margin="8,0,0,0" VerticalAlignment="Center" Click="RecordFolderOpen_Click"/>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="保存先"/>
+                                    <TextBlock x:Name="RecordFolderText" Classes="desc" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Classes="rowAction" Content="録画の画面を開く" Click="OpenRecorder_Click"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="画質・なめらかさ・音"/>
+                                    <TextBlock Classes="desc" Text="録画の画面で、録画するものを見ながら選びます (次の録画にも使います)。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- モデルとセットアップ -->
+                    <StackPanel Classes="page" Tag="Models">
+                        <Border Classes="row">
+                            <DockPanel>
+                                <Button x:Name="SetupButton" DockPanel.Dock="Right" Classes="rowAction accent" Content="セットアップを実行" Click="Setup_Click"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="AI の機能のセットアップ"/>
+                                    <TextBlock Classes="desc" Text="ターミナルが開き、Python 3.11 の環境と AI のモデル (フル 約 8 GB・標準 約 4 GB・最小 約 1 GB。取得済みの分は省略) を用意します。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <TextBlock Classes="settingHeader" Text="入っているモデル"/>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <Border x:Name="AiOcrPill" DockPanel.Dock="Right" Classes="pill"><TextBlock x:Name="AiOcrPillText" FontSize="{StaticResource Gt.Font.Caption}"/></Border>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="AI OCR"/>
+                                    <TextBlock Classes="desc" Text="RapidOCR + PP-OCRv6 (Apache-2.0) ・ Mac の中で動きます"/>
+                                    <TextBlock x:Name="AiOcrStatus" Classes="desc"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <Border x:Name="TranslationPill" DockPanel.Dock="Right" Classes="pill"><TextBlock x:Name="TranslationPillText" FontSize="{StaticResource Gt.Font.Caption}"/></Border>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="ローカル翻訳"/>
+                                    <TextBlock Classes="desc" Text="CTranslate2 ・ 英語: FuguMT (CC BY-SA 4.0) ・ その他の言語: NLLB-200 1.3B (CC BY-NC 4.0・非商用。選んだときだけ)"/>
+                                    <TextBlock x:Name="LocalTranslationStatus" Classes="desc"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <Border x:Name="MinutesPill" DockPanel.Dock="Right" Classes="pill"><TextBlock x:Name="MinutesPillText" FontSize="{StaticResource Gt.Font.Caption}"/></Border>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="議事録 (音声の文字起こし)"/>
+                                    <TextBlock Classes="desc" Text="音声認識: kotoba-whisper v2.0・Whisper large-v3 turbo ・ 話者: 3D-Speaker CAM++ ・ 無音検出: Silero VAD ・ 文脈補正: Qwen3-4B-Instruct-2507 (いずれも Apache-2.0 / MIT)"/>
+                                    <TextBlock x:Name="MinutesStatus" Classes="desc"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- 診断 -->
+                    <StackPanel Classes="page" Tag="Diagnostics">
+                        <Border Classes="row">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Classes="rowAction" Content="開く" Click="OpenLogFolder_Click"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="ログのフォルダ"/>
+                                    <TextBlock Classes="desc" Text="うまく動かないときの記録 (error.log) があります。Mac の外には送りません。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Classes="rowAction" Content="開く" Click="OpenSettingsFolder_Click"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="設定のフォルダ"/>
+                                    <TextBlock Classes="desc" Text="settings.json (この画面の設定) があります。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Classes="rowAction" Content="開く" Click="OpenMinutesFolder_Click"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="議事録のフォルダ"/>
+                                    <TextBlock Classes="desc" Text="自動保存した議事録があります。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Classes="rowAction" Content="開く" Click="OpenModelFolder_Click"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="モデルのフォルダ"/>
+                                    <TextBlock Classes="desc" Text="AI の機能の Python とモデルがあります。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <TextBlock x:Name="VersionText" Classes="desc" Margin="4,16,0,0"/>
+                    </StackPanel>
+                </Panel>
             </ScrollViewer>
-        </TabItem>
-    </TabControl>
+        </DockPanel>
+    </Grid>
 </Window>

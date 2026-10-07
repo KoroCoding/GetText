@@ -8,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 
 namespace GetText;
 
@@ -45,11 +46,15 @@ public partial class TextWindow : Window, IMinutesHost
             if (Pending != null && !HasSelection) Apply(Pending);
         }
 
+        /// <summary>表示を書き換えた (検索の印を付け直す)。</summary>
+        public event Action? Applied;
+
         private void Apply(string text)
         {
             Box.Text = text;
             Pending = null;
             placeholder.IsVisible = text.Length == 0;
+            Applied?.Invoke();
         }
     }
 
@@ -75,6 +80,15 @@ public partial class TextWindow : Window, IMinutesHost
     private int _aiOcrFailures;
     private int _lastCaptureHeight;
     private IReadOnlyList<OcrLineData>? _lastLines;
+    /// <summary>直前に読み取った画面の枠線 (枠・まとまりごとに表示するときだけ探す)。</summary>
+    private IReadOnlyList<LayoutSegment> _lastSegments = [];
+    private OcrGrouping _grouping = OcrGrouping.None;
+    /// <summary>読み取った画像の 1 ポイントあたりのピクセル数 (枠の上に検索の印を描くとき)。</summary>
+    private double _lastPixelScale = 2;
+    private Task? _aiWarmup;
+    private long _lastOcrMs;
+    private bool _accumulating;
+    private bool _lastFromAi;
     private OcrDocument? _doc;
     private List<List<(string Text, ScriptKind Kind)>> _units = [];
 
@@ -95,6 +109,13 @@ public partial class TextWindow : Window, IMinutesHost
         _settings = settings;
         _ocrPane = new Pane(ResultBox, OcrPlaceholder);
         _translationPane = new Pane(TranslationBox, TranslationPlaceholder);
+        _ocrPane.Applied += RefreshSearch;
+        SearchBox.TextChanged += (_, _) => SearchBox_TextChanged();
+        SearchBox.AddHandler(KeyDownEvent, SearchBox_KeyDown, RoutingStrategies.Tunnel);
+        ResultBox.SizeChanged += (_, _) => DrawTextHighlights();
+        ResultBox.AddHandler(ScrollViewer.ScrollChangedEvent, (_, _) => DrawTextHighlights());
+        SizeChanged += (_, _) => FitToolbar();
+        ActualThemeVariantChanged += (_, _) => { DrawTextHighlights(); UpdateCaptureHighlights(); };
         foreach (var pane in new[] { _ocrPane, _translationPane })
         {
             var pn = pane;
@@ -154,6 +175,7 @@ public partial class TextWindow : Window, IMinutesHost
     {
         _timer.Interval = TimeSpan.FromMilliseconds(Math.Max(300, _settings.IntervalMs));
         Topmost = _settings.Topmost;
+        PinToggle.IsChecked = _settings.Topmost;
         ApplyWrap();
         SetFontSize(_settings.FontSize);
         _translator.Engine = _settings.TranslationEngine;
@@ -191,6 +213,11 @@ public partial class TextWindow : Window, IMinutesHost
                 break;
             case nameof(AppSettings.Topmost):
                 Topmost = _settings.Topmost;
+                PinToggle.IsChecked = _settings.Topmost;
+                break;
+            case nameof(AppSettings.OcrView):
+                if (_settings.OcrView == OcrView.Groups && _lastSegments.Count == 0) _forceNext = true; // 枠線を探すため、すぐに読み直す
+                UpdateDocument();
                 break;
             case nameof(AppSettings.Follow):
                 if (_settings.Follow) FollowCapture();
@@ -314,12 +341,24 @@ public partial class TextWindow : Window, IMinutesHost
         Grid.SetColumnSpan(e, colSpan);
     }
 
+    /// <summary>
+    /// 下の右の小さな表示: 読み取りの方式と時間 (「AI OCR · 48 ms」)、翻訳の場所 (Mac 内 / オンライン)。詳しいことはマウスを乗せると出る。
+    /// </summary>
     private void UpdateChips()
     {
-        OcrChip.Text = UseAiOcr && _aiOcrError == null && _aiOcrReady
-            ? "AI OCR" + (_aiOcr.Device switch { "gpu" => " ・ GPU", "cpu" => " ・ CPU", _ => "" })
-            : "Mac の文字認識";
-        TranslationChip.Text = _translator.EngineName;
+        bool ai = UseAiOcr && _aiOcrError == null && _aiOcrReady;
+        string name = ai ? "AI OCR" : "Mac の文字認識";
+        OcrChip.Text = _lastOcrMs > 0 ? $"{name} · {_lastOcrMs} ms" : name;
+        ToolTip.SetTip(OcrChip, ai
+            ? $"AI OCR (RapidOCR + PP-OCRv6)\n{(_aiOcr.Device switch { "gpu" => "GPU", "cpu" => "CPU", _ => "準備中" })}\n確からしさ {_aiOcr.LastConfidence:P0}"
+            : UseAiOcr ? "Mac の文字認識 (Vision。AI OCR を準備中・使えないため)" : "Mac の文字認識 (Vision)");
+        bool local = _translator.Engine == TranslationEngine.Local;
+        TranslationChip.Text = local ? "翻訳: Mac 内" : $"翻訳: {(_translator.Engine == TranslationEngine.DeepL ? "DeepL" : "Google")} (オンライン)";
+        TranslationPlaceIcon.Icon = local ? AppIcon.Local : AppIcon.Cloud;
+        ToolTip.SetTip(TranslationChipBorder, local
+            ? $"{_translator.EngineName}\n文字は Mac の外に送りません"
+            : $"{_translator.EngineName}\n外国語の文をインターネットに送って訳します");
+        UpdateFallbackBar();
     }
 
     // ───────── 読み取り ─────────
@@ -360,16 +399,32 @@ public partial class TextWindow : Window, IMinutesHost
             {
                 _aiOcrError = null;
                 _aiOcrReady = false;
+                _aiWarmup = null;
             }
+            double scale = Math.Max(2, _capture.DesktopScaling);
             var args = new JsonObject
             {
                 ["window"] = number,
                 ["inset"] = new JsonArray(CaptureWindow.Inset.Select(v => (JsonNode)v).ToArray()),
-                ["scale"] = Math.Max(2, _capture.DesktopScaling),
+                ["scale"] = scale,
                 ["force"] = force,
                 ["languages"] = new JsonArray("ja-JP", "en-US", "zh-Hans", "ko-KR"),
             };
-            if (UseAiOcr && _aiOcrError == null)
+            // AI OCR の準備中は待たせない: 裏で準備しながら Mac の文字認識で読み取る
+            bool useAi = UseAiOcr && _aiOcrError == null;
+            if (useAi && !_aiOcrReady)
+            {
+                _aiWarmup ??= StartAiWarmup();
+                if (!_aiWarmup.IsCompleted) useAi = false;
+                else if (_aiWarmup.Exception is { } failed)
+                {
+                    _aiOcrError = failed.InnerException?.Message ?? failed.Message;
+                    _aiOcrErrorAt = DateTime.Now;
+                    useAi = false;
+                }
+            }
+            ShowLoading(UseAiOcr && _aiOcrError == null && !_aiOcrReady);
+            if (useAi)
             {
                 try
                 {
@@ -385,6 +440,7 @@ public partial class TextWindow : Window, IMinutesHost
                             _accuratePending = false;
                             var swa = Stopwatch.StartNew();
                             _lastLines = await _aiOcr.RecognizeAsync(pixels, w, h, CancellationToken.None, accurate: true);
+                            _lastFromAi = true;
                             UpdateDocument(fromNewFrame: true);
                             SetStatus($"高精度で読み直しました {swa.Elapsed.TotalSeconds:0.0} 秒 ・ {_lastLines.Count} 行{AccumulateStatus}");
                         }
@@ -392,20 +448,23 @@ public partial class TextWindow : Window, IMinutesHost
                     }
                     _lastPixels = pixels;
                     _accuratePending = false;
-                    if (!_aiOcrReady) OcrNote.Text = "AI OCR を準備中…";
                     _lastLines = await _aiOcr.RecognizeAsync(pixels, w, h, CancellationToken.None);
+                    _lastFromAi = true;
                     _lastCaptureHeight = h;
+                    _lastPixelScale = scale;
                     sw.Stop();
                     if (!_aiOcrReady)
                     {
                         _aiOcrReady = true;
-                        OcrNote.Text = "";
-                        UpdateChips();
+                        ShowLoading(false);
                     }
                     _aiOcrFailures = 0;
                     _accuratePending = _aiOcr.LastConfidence < 0.9 && _lastLines.Count > 0;
+                    await FindLayoutAsync(pixels, w, h);
+                    _lastOcrMs = sw.ElapsedMilliseconds;
                     UpdateDocument(fromNewFrame: true);
-                    SetStatus($"{DateTime.Now:HH:mm:ss} 更新 ・ {_lastLines.Count} 行 ・ {sw.ElapsedMilliseconds} ms{AccumulateStatus}");
+                    UpdateChips();
+                    SetStatus($"{_lastLines.Count} 行{GroupStatus}{AccumulateStatus}");
                     return;
                 }
                 catch (Exception ex) when (!_aiOcrReady || ++_aiOcrFailures >= 3)
@@ -415,8 +474,8 @@ public partial class TextWindow : Window, IMinutesHost
                     _aiOcrErrorAt = DateTime.Now;
                     _aiOcrFailures = 0;
                     _aiOcrReady = false;
-                    OcrNote.Text = "";
-                    UpdateChips();
+                    _aiWarmup = null;
+                    ShowLoading(false);
                     sw.Restart();
                     args["force"] = true;
                 }
@@ -429,11 +488,21 @@ public partial class TextWindow : Window, IMinutesHost
             _lastLines = reply["lines"]!.AsArray().Select(l => new OcrLineData(
                 [l!["text"]!.GetValue<string>()], l["left"]!.GetValue<double>(), l["top"]!.GetValue<double>(),
                 l["right"]!.GetValue<double>(), l["bottom"]!.GetValue<double>())).ToList();
+            _lastFromAi = false;
+            _lastPixelScale = scale;
             sw.Stop();
+            // 枠・まとまりごとに表示するときは、枠線を探すために画像も受け取る
+            if (_settings.OcrView == OcrView.Groups && !Accumulating && _lastLines.Count >= 2)
+            {
+                args["force"] = true;
+                var shot = await MacHelper.Instance.RequestAsync("capture", args, TimeSpan.FromSeconds(10));
+                await FindLayoutAsync(Convert.FromBase64String(shot["data"]!.GetValue<string>()), shot["w"]!.GetValue<int>(), shot["h"]!.GetValue<int>());
+            }
+            else _lastSegments = [];
+            _lastOcrMs = sw.ElapsedMilliseconds;
             UpdateDocument(fromNewFrame: true);
-            var details = $"{DateTime.Now:HH:mm:ss} 更新 ・ {_lastLines.Count} 行 ・ {sw.ElapsedMilliseconds} ms";
-            if (_aiOcrError != null) details += " ・ AI OCR を使えないため Mac の文字認識で読み取り: " + _aiOcrError;
-            SetStatus(details + AccumulateStatus);
+            UpdateChips();
+            SetStatus($"{_lastLines.Count} 行{GroupStatus}{AccumulateStatus}");
         }
         catch (Exception ex)
         {
@@ -447,6 +516,39 @@ public partial class TextWindow : Window, IMinutesHost
         }
     }
 
+    /// <summary>AI OCR の補助プロセスを裏で起動する。終わったらすぐに読み直す (準備ができれば AI OCR で、失敗なら知らせる)。</summary>
+    private Task StartAiWarmup()
+    {
+        var task = _aiOcr.EnsureStartedAsync();
+        task.ContinueWith(_ => Dispatcher.UIThread.Post(() =>
+        {
+            _forceNext = true;
+            _ = RunOcrAsync(force: false);
+        }), TaskScheduler.Default);
+        return task;
+    }
+
+    /// <summary>枠・まとまりごとに表示するときだけ、画面の枠線を探す (時間がかかるので裏で)。</summary>
+    private async Task FindLayoutAsync(byte[] pixels, int width, int height)
+    {
+        if (_settings.OcrView != OcrView.Groups || Accumulating || _lastLines is not { Count: >= 2 } lines)
+        {
+            _lastSegments = [];
+            return;
+        }
+        try
+        {
+            _lastSegments = await Task.Run(() => OcrLayout.FindSegments(pixels, width, height, lines));
+        }
+        catch (Exception ex)
+        {
+            App.Log("Layout", ex);
+            _lastSegments = [];
+        }
+    }
+
+    private string GroupStatus => _settings.OcrView != OcrView.Groups || Accumulating ? ""
+        : _grouping.HasGroups ? $" ・ まとまり {_grouping.Groups.Count}" : " ・ まとまりなし (上から順)";
     private byte[]? _lastPixels;
     private bool _accuratePending; // 確からしさが低かったので、画面が止まったら高精度で読み直す
 
@@ -470,7 +572,7 @@ public partial class TextWindow : Window, IMinutesHost
         return false;
     }
 
-    private bool Accumulating => AccumulateToggle.IsChecked == true;
+    private bool Accumulating => _accumulating;
 
     private string AccumulateStatus => Accumulating ? $" ・ 蓄積 {_accumulator.LineCount} 行" : "";
 
@@ -478,10 +580,18 @@ public partial class TextWindow : Window, IMinutesHost
     {
         if (_lastLines == null) return;
         var frame = OcrDocument.From(_lastLines, _settings.JoinCjk, correct: false);
+        _grouping = OcrGrouping.None;
         if (Accumulating)
         {
             if (fromNewFrame) _accumulator.Add(frame, _lastCaptureHeight);
             _doc = _accumulator.ToDocument();
+            UpdateAccumulateBar();
+        }
+        else if (_settings.OcrView == OcrView.Groups)
+        {
+            // 枠・まとまりごと: 見つかれば【1】【2】… の見出しを付けて分ける。無ければ上から順のまま
+            _grouping = OcrLayout.Group(_lastLines, _lastSegments);
+            _doc = _grouping.HasGroups ? OcrLayout.ToDocument(_grouping, _settings.JoinCjk, correct: false) : frame;
         }
         else
         {
@@ -499,6 +609,14 @@ public partial class TextWindow : Window, IMinutesHost
     private void RenderOcr()
     {
         if (_doc == null) return;
+        if (_doc.IsEmpty)
+        {
+            // 空の状態: 読み取ったが文字が無い
+            OcrEmptyTitle.Text = Accumulating ? "まだ集めた文字はありません" : "枠の中に文字が見つかりません";
+            OcrEmptyDetail.Text = Accumulating
+                ? "文書をスクロールすると、読んだ内容がここに追記されます。"
+                : "読みたい文字の上に枠を重ねるか、枠を広げてください。小さな文字は枠を大きくすると読みやすくなります。";
+        }
         bool applied = _ocrPane.Set(TextConverter.Apply(_doc.ToDisplayText(), _settings.Convert));
         if (_aiOcrReady || !UseAiOcr) OcrNote.Text = applied ? "" : "選択中のため更新を保留中";
     }
@@ -546,12 +664,12 @@ public partial class TextWindow : Window, IMinutesHost
         }
         if (_translateError != null) note = _translateError;
         TranslationNote.Text = note;
-        TranslationChip.Text = _translator.EngineName;
+        UpdateChips();
     }
 
     private async void PumpTranslation()
     {
-        if (_translating || !_settings.Translate) return;
+        if (_translating || !_settings.Translate || App.DemoMode) return;
         _translating = true;
         int failures = 0;
         try
@@ -613,7 +731,8 @@ public partial class TextWindow : Window, IMinutesHost
     {
         _paused = paused;
         PauseToggle.IsChecked = paused;
-        PauseLabel.Text = paused ? "▶ 再開" : "❚❚ 一時停止";
+        PauseLabel.Text = paused ? "再開" : "一時停止";
+        PauseIcon.Icon = paused ? AppIcon.Play : AppIcon.Pause;
         _capture.SetPaused(paused);
         SetStatus(paused ? "自動読み取りを停止しました" : "自動読み取りを再開しました");
         if (!paused) _forceNext = true;
@@ -623,19 +742,19 @@ public partial class TextWindow : Window, IMinutesHost
 
     private async void Refresh_Click(object? sender, RoutedEventArgs e) => await RunOcrAsync(force: true);
 
-    private void Settings_Click(object? sender, RoutedEventArgs e) => OpenSettings();
+    private void Settings_Click(object? sender, RoutedEventArgs e) => OpenSettings(SettingsPage.ScreenOcr);
 
     /// <summary>設定を開く。owner を渡すとその窓の上に出す (読み取りを閉じているときなど)。</summary>
-    public void OpenSettings(int tab = 0, Window? owner = null)
+    public void OpenSettings(SettingsPage page = SettingsPage.Appearance, Window? owner = null)
     {
         if (_settingsWindow is { IsVisible: true })
         {
-            _settingsWindow.SelectTab(tab);
+            _settingsWindow.SelectPage(page);
             _settingsWindow.Activate();
             return;
         }
         _settingsWindow = new SettingsWindow(this, _settings);
-        _settingsWindow.SelectTab(tab);
+        _settingsWindow.SelectPage(page);
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         // 隠れている窓は持ち主にできない (「議事録の間は読み取りの画面を隠す」・機能を選ぶ画面から使うとき)
         owner ??= IsVisible ? this : null;
@@ -737,15 +856,324 @@ public partial class TextWindow : Window, IMinutesHost
         Close();
     }
 
-    private void AccumulateToggle_Click(object? sender, RoutedEventArgs e)
+    // ───────── コマンドの一覧から使う操作 ─────────
+
+    public void ReadNow() => _ = RunOcrAsync(force: true);
+
+    public void TogglePause() => SetPaused(!_paused);
+
+    public void ToggleAccumulate() => SetAccumulating(!_accumulating);
+
+    public void CopyOriginal() => CopyText(ResultBox, "原文");
+
+    public void CopyTranslation() => CopyText(TranslationBox, "日本語訳");
+
+    public void TogglePin()
     {
-        _accumulator.Clear();
-        ClearButton.IsVisible = Accumulating;
-        UpdateDocument(fromNewFrame: Accumulating);
-        SetStatus(Accumulating
-            ? "蓄積中: スクロールすると読んだ内容を重複なしで追記します" + AccumulateStatus
-            : "蓄積を終了しました");
+        _settings.Topmost = !_settings.Topmost;
+        OnSettingChanged(nameof(AppSettings.Topmost));
     }
+
+    /// <summary>並べ方を変える (上から順 / 枠・まとまりごと)。</summary>
+    public void SetView(OcrView view)
+    {
+        if (_settings.OcrView == view) return;
+        _settings.OcrView = view;
+        OnSettingChanged(nameof(AppSettings.OcrView));
+        SetStatus(view == OcrView.Groups ? "枠・まとまりごとに表示します" : "上から順に表示します");
+        if (view == OcrView.Groups) _ = RunOcrAsync(force: true);
+    }
+
+    private void Palette_Click(object? sender, RoutedEventArgs e) => AppCommands.TogglePalette(this, CommandContext.ScreenOcr);
+
+    private void PinToggle_Click(object? sender, RoutedEventArgs e) => TogglePin();
+
+    private void ViewMenu_Opening(object? sender, EventArgs e)
+    {
+        ViewTextItem.IsChecked = _settings.OcrView == OcrView.Text;
+        ViewGroupsItem.IsChecked = _settings.OcrView == OcrView.Groups;
+        ViewGroupsItem.IsEnabled = !_accumulating; // 蓄積中は上から順につなげる
+        LayoutBelowItem.IsChecked = _settings.Layout == PaneLayout.Below;
+        LayoutRightItem.IsChecked = _settings.Layout == PaneLayout.Right;
+        LayoutBelowItem.IsEnabled = LayoutRightItem.IsEnabled = _settings.Translate;
+        AccumulateItem.IsChecked = _accumulating;
+    }
+
+    private void ViewText_Click(object? sender, RoutedEventArgs e) => SetView(OcrView.Text);
+
+    private void ViewGroups_Click(object? sender, RoutedEventArgs e) => SetView(OcrView.Groups);
+
+    private void LayoutBelow_Click(object? sender, RoutedEventArgs e)
+    {
+        _settings.Layout = PaneLayout.Below;
+        OnSettingChanged(nameof(AppSettings.Layout));
+    }
+
+    private void LayoutRight_Click(object? sender, RoutedEventArgs e)
+    {
+        _settings.Layout = PaneLayout.Right;
+        OnSettingChanged(nameof(AppSettings.Layout));
+    }
+
+    private void AccumulateItem_Click(object? sender, RoutedEventArgs e) => SetAccumulating(!_accumulating);
+
+    private void AccumulateEnd_Click(object? sender, RoutedEventArgs e) => SetAccumulating(false);
+
+    /// <summary>蓄積 (スクロールしながら読んだ内容を重複なしでつなげる) を始める / 終える。蓄積中は帯を出す。</summary>
+    private void SetAccumulating(bool on)
+    {
+        _accumulating = on;
+        _accumulator.Clear();
+        AccumulateBar.IsVisible = on;
+        UpdateDocument(fromNewFrame: on);
+        UpdateAccumulateBar();
+        SetStatus(on ? "蓄積中: スクロールすると読んだ内容を重複なしで追記します" + AccumulateStatus : "蓄積を終了しました");
+    }
+
+    private void UpdateAccumulateBar()
+    {
+        if (_accumulating) AccumulateText.Text = $"蓄積中 ・ {_accumulator.LineCount} 行: スクロールすると、読んだ内容を重複なしで追記します";
+    }
+
+    // ───────── 検索 (⌘F) ─────────
+
+    private List<TextMatch> _matches = [];
+    private int _activeMatch = -1;
+
+    public void ShowSearch()
+    {
+        SearchBar.IsVisible = true;
+        SearchToggle.IsChecked = true;
+        SearchBox.Focus();
+        SearchBox.SelectAll();
+        RefreshSearch();
+    }
+
+    private void CloseSearch()
+    {
+        SearchBar.IsVisible = false;
+        SearchToggle.IsChecked = false;
+        _matches = [];
+        _activeMatch = -1;
+        DrawTextHighlights();
+        _capture.SetHighlights([], -1, _lastPixelScale);
+        ResultBox.Focus();
+    }
+
+    private void SearchToggle_Click(object? sender, RoutedEventArgs e)
+    {
+        if (SearchToggle.IsChecked == true) ShowSearch();
+        else CloseSearch();
+    }
+
+    private void SearchClose_Click(object? sender, RoutedEventArgs e) => CloseSearch();
+
+    private void SearchNext_Click(object? sender, RoutedEventArgs e) => MoveMatch(1);
+
+    private void SearchPrev_Click(object? sender, RoutedEventArgs e) => MoveMatch(-1);
+
+    private void SearchBox_TextChanged()
+    {
+        _activeMatch = -1;
+        RefreshSearch();
+        if (_matches.Count > 0) MoveMatch(0);
+    }
+
+    private void SearchBox_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            MoveMatch(e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? -1 : 1);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CloseSearch();
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>表示している原文から探し直す (読み取りが更新されたときも、今の一致の近くを選び続ける)。</summary>
+    private void RefreshSearch()
+    {
+        if (!SearchBar.IsVisible) return;
+        int previousStart = _activeMatch >= 0 && _activeMatch < _matches.Count ? _matches[_activeMatch].Start : -1;
+        _matches = TextSearch.Find(ResultBox.Text ?? "", SearchBox.Text ?? "");
+        if (_matches.Count == 0) _activeMatch = -1;
+        else if (previousStart >= 0)
+            _activeMatch = _matches.Select((m, i) => (Distance: Math.Abs(m.Start - previousStart), i)).MinBy(x => x.Distance).i;
+        else if (_activeMatch >= _matches.Count) _activeMatch = _matches.Count - 1;
+        ShowMatches();
+    }
+
+    private void MoveMatch(int step)
+    {
+        if (_matches.Count == 0)
+        {
+            ShowMatches();
+            return;
+        }
+        _activeMatch = _activeMatch < 0 ? (step < 0 ? _matches.Count - 1 : 0) : ((_activeMatch + step) % _matches.Count + _matches.Count) % _matches.Count;
+        ShowMatches();
+        // 今の一致が見えるようにスクロールする (選択はしない: 選択中は読み取りの更新を止めてしまうため)
+        if (TextPresenterOf(ResultBox) is { } presenter && ResultBox.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault() is { } sv)
+        {
+            var rect = presenter.TextLayout.HitTestTextPosition(_matches[_activeMatch].Start);
+            double y = rect.Y;
+            if (y < sv.Offset.Y || y + rect.Height > sv.Offset.Y + sv.Viewport.Height)
+                sv.Offset = new Vector(sv.Offset.X, Math.Max(0, y - sv.Viewport.Height / 3));
+        }
+    }
+
+    private void ShowMatches()
+    {
+        bool hasQuery = !string.IsNullOrWhiteSpace(SearchBox.Text);
+        SearchCount.Text = !hasQuery ? "" : _matches.Count == 0 ? "0 件" : $"{(_activeMatch >= 0 ? _activeMatch + 1 : 0)}/{_matches.Count}";
+        SearchCount.Foreground = MacTheme.BrushOf(p => hasQuery && _matches.Count == 0 ? p.Critical : p.TextSecondary);
+        SearchPrevButton.IsEnabled = SearchNextButton.IsEnabled = _matches.Count > 0;
+        DrawTextHighlights();
+        UpdateCaptureHighlights();
+    }
+
+    private static Avalonia.Controls.Presenters.TextPresenter? TextPresenterOf(TextBox box) =>
+        box.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.TextPresenter>().FirstOrDefault();
+
+    /// <summary>原文の欄の上に、見つかった所の印を描く (今の一致は濃い色と太い枠。色だけでなく枠の太さでも区別する)。</summary>
+    private void DrawTextHighlights()
+    {
+        SearchLayer.Children.Clear();
+        if (_matches.Count == 0 || !SearchBar.IsVisible || TextPresenterOf(ResultBox) is not { } presenter) return;
+        var p = MacTheme.Colors;
+        int drawn = 0;
+        for (int m = 0; m < _matches.Count && drawn < 400; m++)
+        {
+            bool active = m == _activeMatch;
+            foreach (var rect in presenter.TextLayout.HitTestTextRange(_matches[m].Start, _matches[m].Length))
+            {
+                if (presenter.TranslatePoint(rect.TopLeft, SearchLayer) is not { } at) continue;
+                if (at.Y + rect.Height < 0 || at.Y > SearchLayer.Bounds.Height) continue;
+                var box = new Avalonia.Controls.Shapes.Rectangle
+                {
+                    Width = rect.Width + 2, Height = rect.Height, RadiusX = 2, RadiusY = 2,
+                    Fill = new SolidColorBrush(Color.FromUInt32(active ? p.SearchHighlightActive : p.SearchHighlight), 0.35),
+                    Stroke = new SolidColorBrush(Color.FromUInt32(active ? p.SearchHighlightActiveBorder : p.SearchHighlightBorder)),
+                    StrokeThickness = active ? 2 : 1,
+                };
+                Canvas.SetLeft(box, at.X - 1);
+                Canvas.SetTop(box, at.Y);
+                SearchLayer.Children.Add(box);
+                drawn++;
+            }
+        }
+    }
+
+    /// <summary>読み取り枠の上にも、見つかった所の印を付ける。</summary>
+    private void UpdateCaptureHighlights()
+    {
+        if (_doc == null || _matches.Count == 0 || !SearchBar.IsVisible || Accumulating)
+        {
+            _capture.SetHighlights([], -1, _lastPixelScale);
+            return;
+        }
+        var shown = ResultBox.Text ?? "";
+        int shownLines = shown.Split('\n').Count(l => l.TrimEnd('\r').Length > 0);
+        if (shownLines != _doc.Lines.Count())
+        {
+            _capture.SetHighlights([], -1, _lastPixelScale);
+            return;
+        }
+        _capture.SetHighlights(TextSearch.ToBoxes(_doc, shown, _matches), _activeMatch, _lastPixelScale);
+    }
+
+    // ───────── 知らせの帯 ─────────
+
+    private bool _fallbackDismissed;
+
+    private void ShowLoading(bool loading)
+    {
+        LoadingBar.IsVisible = loading && !App.DemoMode;
+        UpdateFallbackBar();
+    }
+
+    private void UpdateFallbackBar()
+    {
+        bool fallback = UseAiOcr && _aiOcrError != null;
+        if (!fallback) _fallbackDismissed = false;
+        FallbackBar.IsVisible = fallback && !_fallbackDismissed && !App.DemoMode;
+        FallbackText.Text = _aiOcrError ?? "";
+    }
+
+    private void FallbackClose_Click(object? sender, RoutedEventArgs e)
+    {
+        _fallbackDismissed = true;
+        UpdateFallbackBar();
+    }
+
+    private void FallbackDetails_Click(object? sender, RoutedEventArgs e)
+    {
+        FallbackText.IsVisible = !FallbackText.IsVisible;
+        FallbackDetails.Content = FallbackText.IsVisible ? "閉じる" : "詳細";
+    }
+
+    // 幅が狭いときは操作バーの文字を隠してアイコンだけにする (名前はマウスを乗せると出る)
+    private void FitToolbar()
+    {
+        bool compact = Bounds.Width < 500;
+        foreach (var label in this.GetVisualDescendants().OfType<TextBlock>().Where(t => t.Classes.Contains("toolLabel")))
+            label.IsVisible = !compact;
+    }
+
+    // ───────── 見本の画面・動作確認 ─────────
+
+    internal void ShowDemoLines(IReadOnlyList<OcrLineData> lines, byte[]? pixels, int width, int height, string? translation, double pixelScale = 1)
+    {
+        _accumulating = false;
+        _lastLines = lines;
+        _lastFromAi = true;
+        _lastCaptureHeight = height;
+        _lastPixelScale = pixelScale;
+        _lastSegments = pixels != null && _settings.OcrView == OcrView.Groups ? OcrLayout.FindSegments(pixels, width, height, lines) : [];
+        UpdateDocument(fromNewFrame: true);
+        if (translation != null) _translationPane.Set(translation);
+        TranslationNote.Text = "";
+        _lastOcrMs = 52;
+        UpdateChips();
+        StatusText.Text = $"{lines.Count} 行{GroupStatus}";
+    }
+
+    internal void ShowDemoState(string state)
+    {
+        LoadingBar.IsVisible = state == "loading";
+        FallbackBar.IsVisible = state == "fallback";
+        if (state == "fallback")
+        {
+            FallbackText.Text = "ocr_server.py が起動しませんでした (Python が見つかりません)";
+            OcrChip.Text = "Mac の文字認識 · 180 ms";
+        }
+        if (state == "loading") OcrChip.Text = "Mac の文字認識 · 160 ms";
+        if (state == "empty")
+        {
+            _lastLines = [];
+            UpdateDocument();
+            _translationPane.Set("");
+            TranslationNote.Text = "";
+            StatusText.Text = "0 行";
+        }
+    }
+
+    internal void ShowDemoSearch(string query)
+    {
+        ShowSearch();
+        SearchBox.Text = query;
+    }
+
+    internal void CloseDemoSearch() => CloseSearch();
+
+    internal string SearchCountText => SearchCount.Text ?? "";
+
+    internal void SearchNextForTest() => MoveMatch(1);
+
+    internal string ResultText => ResultBox.Text ?? "";
 
     private void Clear_Click(object? sender, RoutedEventArgs e)
     {
@@ -847,8 +1275,15 @@ public partial class TextWindow : Window, IMinutesHost
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
         var cmd = CommandKey;
+        if (AppCommands.HandleKey(this, e, CommandContext.ScreenOcr)) return;
         if (e.Key == Key.F5 || (e.Key == Key.R && e.KeyModifiers == cmd))
             _ = RunOcrAsync(force: true);
+        else if (e.Key == Key.F && e.KeyModifiers == cmd)
+            ShowSearch();
+        else if (e.Key == Key.G && SearchBar.IsVisible && (e.KeyModifiers == cmd || e.KeyModifiers == (cmd | KeyModifiers.Shift)))
+            MoveMatch(e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? -1 : 1);
+        else if (e.Key == Key.Escape && SearchBar.IsVisible)
+            CloseSearch();
         else if (e.Key == Key.P && e.KeyModifiers == cmd)
             SetPaused(!_paused);
         else if (e.Key == Key.OemComma && e.KeyModifiers == cmd)

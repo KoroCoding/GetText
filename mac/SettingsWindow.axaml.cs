@@ -3,13 +3,30 @@ using System.IO;
 using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.LogicalTree;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 
 namespace GetText;
 
-/// <summary>設定画面 (Mac 版)。変更はその場でメイン画面に反映し、保存する。</summary>
+/// <summary>設定の検索で見つかった行。</summary>
+public sealed record SettingHit(string Label, string Where, SettingsPage Page, Border Row);
+
+/// <summary>プライバシーのページの 1 行 (何を Mac の中で処理し、何を送るか)。</summary>
+public sealed record PrivacyRow(string Label, string Description, bool Online, SettingsPage? Page, string ActionLabel)
+{
+    public string PillText => Online ? "オンライン" : "Mac 内";
+    public AppIcon PillIcon => Online ? AppIcon.Cloud : AppIcon.Local;
+    public IBrush PillBackground => MacTheme.BrushOf(p => Online ? p.WarningSubtle : p.SuccessSubtle);
+    public IBrush PillForeground => MacTheme.BrushOf(p => Online ? p.Warning : p.Success);
+    public bool HasAction => Page != null;
+}
+
+/// <summary>設定画面 (Mac 版)。一般 / 機能 / 拡張 / 詳細 のページと検索。変更はその場でメイン画面に反映し、保存する。</summary>
 public partial class SettingsWindow : Window
 {
     private readonly TextWindow _main;
@@ -41,6 +58,8 @@ public partial class SettingsWindow : Window
         IntervalBox.ItemsSource = SettingsOptions.Intervals;
         IntervalBox.SelectedItem = SettingsOptions.Find(SettingsOptions.Intervals, settings.IntervalMs);
         JoinCheck.IsChecked = settings.JoinCjk;
+        OcrViewBox.ItemsSource = SettingsOptions.OcrViews;
+        OcrViewBox.SelectedItem = SettingsOptions.Find(SettingsOptions.OcrViews, settings.OcrView);
 
         TranslateCheck.IsChecked = settings.Translate;
         EngineBox.ItemsSource = SettingsOptions.TranslationEngines;
@@ -66,18 +85,193 @@ public partial class SettingsWindow : Window
         ConvertBox.SelectedItem = SettingsOptions.Find(SettingsOptions.ConvertModes, settings.Convert);
         TopmostCheck.IsChecked = settings.Topmost;
         FollowCheck.IsChecked = settings.Follow;
+        HomeMinimizeCheck.IsChecked = settings.HomeMinimizeOnOpen;
+        RecordFolderText.Text = RecordFolder;
+        ToolTip.SetTip(RecordFolderText, RecordFolder);
+
+        foreach (var page in Pages.Children.OfType<StackPanel>())
+            if (page.Tag is string tag && Enum.TryParse<SettingsPage>(tag, out var p)) _pages[p] = page;
+        foreach (var nav in NavPanel.Children.OfType<RadioButton>())
+            if (nav.Tag is string tag && Enum.TryParse<SettingsPage>(tag, out var p)) _nav[p] = nav;
+
+        SettingSearch.TextChanged += (_, _) => SettingSearch_TextChanged();
+        AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (AppCommands.HandleKey(this, e, CommandContext.Settings)) return;
+            var cmd = TopLevel.GetTopLevel(this)?.PlatformSettings?.HotkeyConfiguration.CommandModifiers ?? KeyModifiers.Meta;
+            if (e.Key == Key.F && e.KeyModifiers == cmd)
+            {
+                SettingSearch.Focus();
+                SettingSearch.SelectAll();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape && !string.IsNullOrEmpty(SettingSearch.Text))
+            {
+                SettingSearch.Text = "";
+                e.Handled = true;
+            }
+        }, RoutingStrategies.Tunnel);
 
         BuildShortcuts();
+        BuildPrivacy();
         UpdateDependentState();
-        Activated += (_, _) => _ = UpdateStatusAsync();
+        Activated += (_, _) => { _ = UpdateStatusAsync(); BuildPrivacy(); };
+        ActualThemeVariantChanged += (_, _) => { BuildPrivacy(); _ = UpdateStatusAsync(); }; // (コードで色を付けた印を塗り直す)
         Opened += (_, _) => _ = UpdateStatusAsync();
+        SelectPage(SettingsPage.Appearance);
         _loading = false;
     }
 
-    public void SelectTab(int index) => Tabs.SelectedIndex = Math.Clamp(index, 0, Tabs.ItemCount - 1);
+    private readonly Dictionary<SettingsPage, StackPanel> _pages = [];
+    private readonly Dictionary<SettingsPage, RadioButton> _nav = [];
+    private SettingsPage _page = SettingsPage.Appearance;
 
-    /// <summary>「議事録」のページの番号。</summary>
-    public const int MinutesTab = 3;
+    public SettingsPage CurrentPage => _page;
+
+    /// <summary>ページを開く (検索していれば検索を消す)。</summary>
+    public void SelectPage(SettingsPage page)
+    {
+        if (!_nav.TryGetValue(page, out var nav)) return;
+        if (nav.IsChecked == true) ShowPage(page);
+        else nav.IsChecked = true; // (Nav_Checked でページを出す)
+    }
+
+    private void Nav_Checked(object? sender, RoutedEventArgs e)
+    {
+        if (sender is RadioButton { IsChecked: true, Tag: string tag } && Enum.TryParse<SettingsPage>(tag, out var page)) ShowPage(page);
+    }
+
+    private void ShowPage(SettingsPage page)
+    {
+        _page = page;
+        if (!string.IsNullOrEmpty(SettingSearch.Text)) SettingSearch.Text = "";
+        foreach (var (p, panel) in _pages) panel.IsVisible = p == page;
+        SearchResults.IsVisible = false;
+        PageTitleText.Text = AppCommands.SettingsPages.First(x => x.Page == page).Title;
+        PageScroll.Offset = default;
+    }
+
+    // ───────── 設定の検索 ─────────
+
+    internal List<SettingHit> FindSettings(string query)
+    {
+        var tokens = CommandSearch.Normalize(query).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var hits = new List<SettingHit>();
+        if (tokens.Length == 0) return hits;
+        foreach (var (page, panel) in _pages)
+        {
+            string pageTitle = AppCommands.SettingsPages.First(x => x.Page == page).Title;
+            foreach (var row in panel.GetLogicalDescendants().OfType<Border>().Where(b => b.Classes.Contains("row")))
+            {
+                var texts = row.GetLogicalDescendants().OfType<TextBlock>().ToList();
+                var label = texts.FirstOrDefault(t => t.Classes.Contains("label"))?.Text;
+                if (string.IsNullOrEmpty(label)) continue;
+                var haystack = CommandSearch.Normalize(pageTitle + " " + string.Join(" ", texts.Select(t => t.Text)));
+                if (tokens.All(t => haystack.Contains(t, StringComparison.Ordinal))) hits.Add(new SettingHit(label, pageTitle, page, row));
+            }
+        }
+        return hits;
+    }
+
+    private void SettingSearch_TextChanged()
+    {
+        var query = SettingSearch.Text ?? "";
+        if (query.Length == 0)
+        {
+            ShowPage(_page);
+            return;
+        }
+        var hits = FindSettings(query);
+        foreach (var panel in _pages.Values) panel.IsVisible = false;
+        SearchResults.IsVisible = true;
+        SearchResultList.ItemsSource = hits;
+        SearchEmpty.IsVisible = hits.Count == 0;
+        PageTitleText.Text = hits.Count == 0 ? "検索" : $"検索 ・ {hits.Count} 件";
+    }
+
+    /// <summary>見本の画面・動作確認: 設定を検索する。</summary>
+    internal void ShowDemoSearch(string query) => SettingSearch.Text = query;
+
+    private void SearchResult_Click(object? sender, RoutedEventArgs e)
+    {
+        if ((sender as Control)?.DataContext is not SettingHit hit) return;
+        SelectPage(hit.Page);
+        foreach (var expander in hit.Row.GetLogicalAncestors().OfType<Expander>()) expander.IsExpanded = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            hit.Row.BringIntoView();
+            hit.Row.BorderBrush = MacTheme.BrushOf(p => p.FocusRing);
+            hit.Row.BorderThickness = new Thickness(2);
+            DispatcherTimer.RunOnce(() =>
+            {
+                hit.Row.ClearValue(Border.BorderBrushProperty);
+                hit.Row.ClearValue(Border.BorderThicknessProperty);
+            }, TimeSpan.FromSeconds(1.6));
+        }, DispatcherPriority.Loaded);
+    }
+
+    // ───────── プライバシー ─────────
+
+    private void BuildPrivacy()
+    {
+        bool cloud = _settings.Translate && _settings.TranslationEngine != TranslationEngine.Local;
+        string service = _settings.TranslationEngine == TranslationEngine.DeepL ? "DeepL" : "Google";
+        PrivacyList.ItemsSource = new List<PrivacyRow>
+        {
+            new("文字の読み取り", "枠の中の画面は Mac の中で読み取ります (AI OCR・Mac の文字認識とも)。画像は保存しません。", false, SettingsPage.ScreenOcr, "設定"),
+            new("翻訳", cloud ? $"外国語と判定した文を {service} に送って訳します。" : "Mac の中の翻訳モデルで訳します。文字は外に送りません。", cloud, SettingsPage.Translation, "変更"),
+            new("議事録の文字起こし", "会議の音声は Mac の中で文字にします。" + (_settings.MinutesSaveAudio ? "聞き直せるよう、音声を Mac に保存します。" : "音声は保存しません。"), false, SettingsPage.Meetings, "設定"),
+            new("話者の声の記憶", _settings.MinutesRememberVoices ? "名前を付けた話者の声の特徴 (数値) を Mac に覚えます。音声そのものは保存しません。" : "覚えません。", false, SettingsPage.Meetings, "設定"),
+            new("画面の録画", "録画は Mac のフォルダに保存します。どこにも送りません。", false, SettingsPage.Recording, "設定"),
+            new("セットアップ", "AI のモデルを入れるときだけ、配布元 (Hugging Face など) からダウンロードします。", true, SettingsPage.Models, "開く"),
+        };
+    }
+
+    private void PrivacyAction_Click(object? sender, RoutedEventArgs e)
+    {
+        if ((sender as Control)?.Tag is SettingsPage page) SelectPage(page);
+    }
+
+    // ───────── 外観・ホーム・録画 ─────────
+
+    private void HomeMinimize_Click(object? sender, RoutedEventArgs e)
+    {
+        _settings.HomeMinimizeOnOpen = HomeMinimizeCheck.IsChecked == true;
+        _settings.Save();
+    }
+
+    private void OcrViewBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || OcrViewBox.SelectedItem is not Option<OcrView> o) return;
+        _main.SetView(o.Value);
+    }
+
+    private string RecordFolder => string.IsNullOrWhiteSpace(_settings.RecordFolder)
+        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "GetText")
+        : _settings.RecordFolder;
+
+    private async void RecordFolderChange_Click(object? sender, RoutedEventArgs e)
+    {
+        var folders = await StorageProvider.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions { Title = "録画の保存先" });
+        if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } folder) return;
+        _settings.RecordFolder = folder;
+        _settings.Save();
+        RecordFolderText.Text = RecordFolder;
+        ToolTip.SetTip(RecordFolderText, RecordFolder);
+        App.Home?.Recorder?.ReloadFolder();
+    }
+
+    private void RecordFolderOpen_Click(object? sender, RoutedEventArgs e) => OpenFolder(RecordFolder);
+
+    private void OpenRecorder_Click(object? sender, RoutedEventArgs e) => App.Home?.OpenRecorder();
+
+    // 入っている / 入っていない の印 (色と文字の両方で)
+    private static void SetPill(Border pill, TextBlock text, bool installed)
+    {
+        pill.Background = MacTheme.BrushOf(p => installed ? p.SuccessSubtle : p.SurfaceSecondary);
+        text.Foreground = MacTheme.BrushOf(p => installed ? p.Success : p.TextSecondary);
+        text.Text = installed ? "入っています" : "未セットアップ";
+    }
 
     /// <summary>議事録の表示の設定を読み直す (議事録の画面の「表示」で変えたとき)。</summary>
     public void LoadMinutesDisplay()
@@ -110,7 +304,6 @@ public partial class SettingsWindow : Window
         _main.OnSettingChanged(name);
         UpdateDependentState();
     }
-
     private void UpdateDependentState()
     {
         EngineBox.IsEnabled = _settings.Translate;
@@ -129,7 +322,7 @@ public partial class SettingsWindow : Window
     private async Task UpdateStatusAsync()
     {
         AiOcrStatus.Text = !AiOcr.IsInstalled
-            ? "未セットアップ — 下の「セットアップを実行」でインストールできます (入れるまでは Mac の文字認識で読み取ります)"
+            ? "上の「セットアップを実行」で入れられます (入れるまでは Mac の文字認識で読み取ります)"
             : _main.AiOcr.Device switch
             {
                 "gpu" => "動作中 (GPU)",
@@ -137,7 +330,7 @@ public partial class SettingsWindow : Window
                 _ => "インストール済み (AI を選ぶと起動します)",
             };
         LocalTranslationStatus.Text = !LocalTranslator.IsInstalled
-            ? "未セットアップ — 下の「セットアップを実行」でインストールできます"
+            ? "上の「セットアップを実行」で入れられます"
             : _settings.TranslationEngine == TranslationEngine.Local && _settings.Translate
                 ? "インストール済み ・ " + _main.Translator.EngineName
                 : "インストール済み";
@@ -145,7 +338,13 @@ public partial class SettingsWindow : Window
             ? TranscriptionService.IsMultilingualInstalled
                 ? "インストール済み ・ 日本語・英語など (メイン画面の「議事録」から使えます)"
                 : "インストール済み ・ 日本語のみ (英語などは「セットアップを実行」で追加できます)"
-            : "未セットアップ — 下の「セットアップを実行」でインストールできます";
+            : "上の「セットアップを実行」で入れられます";
+        bool missing = !AiOcr.IsInstalled || !TranscriptionService.IsInstalled;
+        ModelsBadge.IsVisible = missing && !App.DemoMode;
+        SetupButton.Content = missing ? "セットアップを実行" : "セットアップをやり直す・追加";
+        SetPill(AiOcrPill, AiOcrPillText, AiOcr.IsInstalled);
+        SetPill(TranslationPill, TranslationPillText, LocalTranslator.IsInstalled);
+        SetPill(MinutesPill, MinutesPillText, TranscriptionService.IsInstalled);
         var version = Assembly.GetExecutingAssembly().GetName().Version;
         VersionText.Text = $"GetText for Mac {version?.ToString(3)} ・ .NET {Environment.Version}";
         try

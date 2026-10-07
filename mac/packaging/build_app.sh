@@ -40,7 +40,8 @@ sed "s/__VERSION__/$version/g" "$here/Info.plist" > "$app/Contents/Info.plist"
 echo "== アイコンを作っています"
 iconset="$work/GetText.iconset"
 mkdir -p "$iconset"
-sips -s format png "$root/Assets/app.ico" --out "$work/icon.png" >/dev/null
+# 元の絵: 1024 px の PNG (tools/make_icon.py が作る。無ければ app.ico から)
+if [ -f "$root/Assets/app_1024.png" ]; then cp "$root/Assets/app_1024.png" "$work/icon.png"; else sips -s format png "$root/Assets/app.ico" --out "$work/icon.png" >/dev/null; fi
 for size in 16 32 128 256 512; do
     sips -z $size $size "$work/icon.png" --out "$iconset/icon_${size}x${size}.png" >/dev/null
     double=$((size * 2))

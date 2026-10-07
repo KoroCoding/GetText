@@ -115,6 +115,8 @@ public sealed class AppSettings
     public bool Wrap { get; set; } = true;
     public bool JoinCjk { get; set; } = true;
     public ConvertMode Convert { get; set; } = ConvertMode.None;
+    /// <summary>読み取った文字を上から順に並べるか、枠・かたまりごとに分けるか。</summary>
+    public OcrView OcrView { get; set; } = OcrView.Text;
 
     public bool Translate { get; set; } = true;
     public TranslationEngine TranslationEngine { get; set; } = TranslationEngine.Local;
@@ -211,6 +213,7 @@ public sealed class AppSettings
         Theme = Defined(Theme, AppTheme.System);
         Layout = Defined(Layout, PaneLayout.Below);
         Convert = Defined(Convert, ConvertMode.None);
+        OcrView = Defined(OcrView, OcrView.Text);
         TranslationEngine = Defined(TranslationEngine, TranslationEngine.Local);
         Hotkeys ??= [];
         MinutesLanguages ??= ["ja", "en"];

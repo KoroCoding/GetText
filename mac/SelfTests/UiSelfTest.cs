@@ -284,12 +284,67 @@ internal static class UiSelfTest
         view.Flyout?.Hide();
 
         // 18. 機能を選ぶ画面と画面の録画の画面
-        var home = new HomeWindow(new TextWindow(new CaptureWindow(settings), settings), settings) { Width = 500 };
+        var capture2 = new CaptureWindow(settings);
+        var text2 = new TextWindow(capture2, settings) { Width = 560, Height = 480 };
+        var home = new HomeWindow(text2, settings);
         home.Show();
         await Idle();
-        var opens = new[] { "OcrOpen", "MinutesOpen", "RecordOpen" }.Select(n => home.FindControl<Button>(n)!).ToList();
-        Check(opens.All(b => b.IsVisible), $"機能を選ぶ画面に 3 つの機能が出る ({string.Join(" / ", opens.Select(b => b.Content))})");
+        var tiles = home.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("tile")).ToList();
+        Check(tiles.Count == 3 && tiles.All(b => b.IsEffectivelyVisible && b.Bounds.Width >= 120),
+            $"ホームに 3 つの機能のタイルが出る ({tiles.Count} 枚、幅 {string.Join("/", tiles.Select(b => b.Bounds.Width.ToString("0")))})");
         home.Hide(); // (閉じると GetText の終了になるので隠すだけ)
+
+        // コマンドの一覧 (⌘K): 日本語でも英語でも見つかる
+        var palette = new CommandPalette(AppCommands.Registry, CommandContext.Home);
+        palette.Show();
+        palette.SetQuery("録画");
+        await Idle();
+        Check(palette.Items.Count > 0 && palette.Items[0].Command.Id.StartsWith("feature.record"), $"コマンドの一覧で「録画」を探すと、画面の録画が先頭に出る ({palette.Items.FirstOrDefault()?.Title})");
+        palette.SetQuery("search");
+        await Idle();
+        Check(palette.Items.Any(i => i.Command.Id == "ocr.search"), "コマンドの一覧は英語の名前でも見つかる (search → 読み取った文字を検索)");
+        palette.Close();
+
+        // 読み取りの画面: 検索の件数と枠の上の印、読み取りが更新されても今の一致を選び続ける、枠・まとまりごと
+        capture2.Show();
+        text2.Show();
+        await Idle();
+        OcrLineData L(string s, double x, double y) => new([s], x, y, x + s.Length * 9, y + 18);
+        text2.ShowDemoLines([L("alpha beta", 10, 10), L("gamma alpha", 10, 40), L("delta", 10, 70)], null, 300, 120, null);
+        text2.ShowDemoSearch("ALPHA");
+        await Idle();
+        Check(text2.SearchCountText == "1/2" && capture2.HighlightCount >= 2, $"検索の件数と枠の上の印 (「{text2.SearchCountText}」、印 {capture2.HighlightCount})");
+        text2.SearchNextForTest();
+        text2.ShowDemoLines([L("intro", 10, 0), L("alpha beta", 10, 20), L("gamma alpha", 10, 44), L("delta", 10, 70)], null, 300, 120, null);
+        await Idle();
+        Check(text2.SearchCountText == "2/2", $"読み取りが更新されても、検索の位置は先頭に戻らない (「{text2.SearchCountText}」)");
+        text2.CloseDemoSearch();
+        Check(capture2.HighlightCount == 0, "検索を閉じると枠の上の印も消える");
+        var grid = new byte[300 * 120 * 4];
+        Array.Fill(grid, (byte)255);
+        void Box(int l, int t, int r, int b)
+        {
+            for (int x = l; x <= r; x++) foreach (int y in new[] { t, t + 1, b - 1, b }) { int i = (y * 300 + x) * 4; grid[i] = grid[i + 1] = grid[i + 2] = 60; }
+            for (int y = t; y <= b; y++) foreach (int x in new[] { l, l + 1, r - 1, r }) { int i = (y * 300 + x) * 4; grid[i] = grid[i + 1] = grid[i + 2] = 60; }
+        }
+        Box(2, 2, 145, 117);
+        Box(152, 2, 297, 117);
+        settings.OcrView = OcrView.Groups;
+        text2.ShowDemoLines([L("A-1 山田", 12, 12), L("B-1 佐藤", 162, 12), L("A-2 鈴木", 12, 44), L("B-2 高橋", 162, 44)], grid, 300, 120, null);
+        var grouped = text2.ResultText.Replace("\r\n", "\n");
+        Check(grouped.StartsWith("【1】\nA-1 山田\nA-2 鈴木") && grouped.Contains("【2】\nB-1 佐藤\nB-2 高橋"), $"枠・まとまりごとに分ける (「{grouped.Replace("\n", " / ")}」)");
+        settings.OcrView = OcrView.Text;
+        text2.Hide();
+        capture2.Hide();
+
+        // 設定: 検索で別のページの項目も見つかる
+        var sw = new SettingsWindow(text2, settings);
+        sw.Show();
+        await Idle();
+        var hits = sw.FindSettings("テーマ");
+        Check(hits.Count >= 1 && hits[0].Page == SettingsPage.Appearance, $"設定を検索できる (「テーマ」→ {string.Join(", ", hits.Select(h => h.Where + "/" + h.Label))})");
+        Check(sw.FindSettings("間隔").Any(h => h.Page == SettingsPage.ScreenOcr), "詳細設定にたたんだ項目も検索できる (間隔)");
+        sw.Close();
         var recorderWindow = new RecorderWindow(settings);
         recorderWindow.LoadDemo();
         recorderWindow.Show();

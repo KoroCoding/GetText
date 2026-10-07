@@ -263,6 +263,8 @@ internal static class UiSelfTest
             ShowInTaskbar = false, ShowActivated = false, WindowStartupLocation = WindowStartupLocation.Manual, Left = -32000, Top = -32000,
         };
         sw.Show();
+        sw.SelectPage(SettingsPage.ScreenOcr);
+        ((Expander)sw.FindName("WindowsOcrDetails")).IsExpanded = true; // (和文の空白は「詳細設定」の中)
         await Idle(sw);
         var join = (CheckBox)sw.FindName("JoinCheck");
         bool before = join.IsChecked == true;
@@ -271,6 +273,15 @@ internal static class UiSelfTest
         label.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = Mouse.MouseUpEvent });
         await Idle(sw);
         Check(join.IsChecked == !before && settings.JoinCjk == !before, $"設定の行の説明を押すとチェックが切り替わる ({before} → {join.IsChecked})");
+        // 設定の検索: 別のページの項目も見つかり、押すとそのページが開く
+        var hits = sw.FindSettings("テーマ");
+        Check(hits.Count >= 1 && hits[0].Page == SettingsPage.Appearance, $"設定を検索できる (「テーマ」→ {string.Join(", ", hits.Select(h => h.Where + "/" + h.Label))})");
+        var deepHits = sw.FindSettings("拡大");
+        Check(deepHits.Any(h => h.Page == SettingsPage.ScreenOcr), $"詳細設定にたたんだ項目も検索できる (「拡大」→ {deepHits.Count} 件)");
+        sw.SelectPage(SettingsPage.Privacy);
+        await Idle(sw);
+        Check(sw.CurrentPage == SettingsPage.Privacy && ((ItemsControl)sw.FindName("PrivacyList")).Items.Count >= 5,
+            $"プライバシーのページに、送る・送らないの一覧が出る ({((ItemsControl)sw.FindName("PrivacyList")).Items.Count} 件)");
         sw.Close();
 
         // 確かめた画面を画像に残す (記録中: 確定前の文字の欄と最新の発言が重ならないか)
@@ -301,8 +312,27 @@ internal static class UiSelfTest
         };
         home.Show();
         await Idle(home);
-        var openButtons = new[] { "OcrOpen", "MinutesOpen", "RecordOpen" }.Select(n => (Button)home.FindName(n)).ToList();
-        Check(openButtons.All(b => b.IsVisible && (string)b.Content == "開く"), $"機能を選ぶ画面に 3 つの機能が出る ({string.Join(" / ", openButtons.Select(b => b.Content))})");
+        var tiles = Descendants<Button>(home).Where(b => b.DataContext is FeatureTile && b.Style == (Style)home.FindResource("TileButton")).ToList();
+        Check(tiles.Count == 3 && tiles.All(b => b.IsVisible && b.ActualWidth >= 120 && b.ActualHeight >= 100),
+            $"ホームに 3 つの機能のタイルが出る ({tiles.Count} 枚、幅 {string.Join("/", tiles.Select(b => b.ActualWidth.ToString("0")))})");
+        Check(tiles.All(b => !string.IsNullOrEmpty(System.Windows.Automation.AutomationProperties.GetName(b))),
+            "タイルに読み上げの名前がある");
+        // コマンドの一覧 (Ctrl+K): 検索すると合うものが上に出る
+        var palette = new CommandPalette(AppCommands.Registry, CommandContext.Home)
+        {
+            ShowInTaskbar = false, ShowActivated = false, Left = -32000, Top = -32000,
+        };
+        palette.Show();
+        palette.SetQuery("録画");
+        await Idle(palette);
+        Check(palette.Items.Count > 0 && palette.Items[0].Command.Id.StartsWith("feature.record"), $"コマンドの一覧で「録画」を探すと、画面の録画が先頭に出る ({palette.Items.FirstOrDefault()?.Title})");
+        palette.SetQuery("preferences");
+        await Idle(palette);
+        Check(palette.Items.Any(i => i.Command.Id == "settings.open"), "コマンドの一覧は英語の名前でも見つかる (preferences → 設定を開く)");
+        palette.SetQuery("search");
+        await Idle(palette);
+        Check(palette.Items.All(i => !i.Command.Id.StartsWith("ocr.", StringComparison.Ordinal)), "読み取りを閉じているときは、読み取りの操作を一覧に出さない");
+        palette.CloseIfOpen();
         SavePng((FrameworkElement)home.Content, Path.ChangeExtension(reportPath, ".home.png"));
         // 読み取りを閉じたまま (読み取りの窓を一度も出さずに)、機能を選ぶ画面から設定を開ける
         string settingsError = "";
@@ -319,6 +349,53 @@ internal static class UiSelfTest
         Check(openedSettings is { IsVisible: true }, $"機能を選ぶ画面から設定を開ける {settingsError}");
         openedSettings?.Close();
         home.Hide();
+
+        // 20. 読み取りの画面: 検索 (Ctrl+F) で件数と枠の上の印が出る / 枠・まとまりごとに分けられる
+        var capture2 = new CaptureWindow(settings)
+        {
+            ShowInTaskbar = false, ShowActivated = false, WindowStartupLocation = WindowStartupLocation.Manual, Left = -32000, Top = -32000,
+        };
+        capture2.Show();
+        var text2 = new TextWindow(capture2, settings)
+        {
+            ShowInTaskbar = false, ShowActivated = false, WindowStartupLocation = WindowStartupLocation.Manual, Left = -32000, Top = -32000,
+        };
+        text2.Show();
+        await Idle(text2);
+        OcrLineData L(string s, double x, double y) => new([s], x, y, x + s.Length * 9, y + 18);
+        text2.ShowDemoLines([L("alpha beta", 10, 10), L("gamma alpha", 10, 40), L("delta", 10, 70)], null, 300, 120, null);
+        text2.ShowDemoSearch("ALPHA");
+        await Idle(text2);
+        Check(((TextBlock)text2.FindName("SearchCount")).Text == "1/2" && capture2.HighlightCount >= 2,
+            $"検索の件数と枠の上の印 (「{((TextBlock)text2.FindName("SearchCount")).Text}」、印 {capture2.HighlightCount})");
+        ((Button)text2.FindName("SearchNextButton")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        await Idle(text2);
+        // 上に行が増えても、今の一致 (2 件目の alpha) を選び続ける
+        text2.ShowDemoLines([L("intro", 10, 0), L("alpha beta", 10, 20), L("gamma alpha", 10, 44), L("delta", 10, 70)], null, 300, 120, null);
+        await Idle(text2);
+        Check(((TextBlock)text2.FindName("SearchCount")).Text == "2/2", $"読み取りが更新されても、検索の位置は先頭に戻らない (「{((TextBlock)text2.FindName("SearchCount")).Text}」)");
+        text2.CloseDemoSearch();
+        Check(capture2.HighlightCount == 0, "検索を閉じると枠の上の印も消える");
+        settings.OcrView = OcrView.Groups;
+        var grid = new byte[300 * 120 * 4];
+        Array.Fill(grid, (byte)255);
+        void Box(int l, int t, int r, int b)
+        {
+            for (int x = l; x <= r; x++) foreach (int y in new[] { t, t + 1, b - 1, b }) { int i = (y * 300 + x) * 4; grid[i] = grid[i + 1] = grid[i + 2] = 60; }
+            for (int y = t; y <= b; y++) foreach (int x in new[] { l, l + 1, r - 1, r }) { int i = (y * 300 + x) * 4; grid[i] = grid[i + 1] = grid[i + 2] = 60; }
+        }
+        Box(2, 2, 145, 117);
+        Box(152, 2, 297, 117);
+        text2.ShowDemoLines([L("A-1 山田", 12, 12), L("B-1 佐藤", 162, 12), L("A-2 鈴木", 12, 44), L("B-2 高橋", 162, 44)], grid, 300, 120, null);
+        await Idle(text2);
+        var grouped = ((TextBox)text2.FindName("ResultBox")).Text;
+        Check(grouped.StartsWith("【1】\r\nA-1 山田\r\nA-2 鈴木") && grouped.Contains("【2】\r\nB-1 佐藤\r\nB-2 高橋"),
+            $"枠・まとまりごとに分ける (「{grouped.Replace("\r\n", " / ")}」)");
+        settings.OcrView = OcrView.Text;
+        text2.ShowDemoLines([L("A-1 山田", 12, 12), L("B-1 佐藤", 162, 12)], grid, 300, 120, null);
+        Check(!((TextBox)text2.FindName("ResultBox")).Text.Contains('【'), "上から順に戻すと見出しは付かない");
+        text2.Hide();
+        capture2.Hide();
 
         // 19. 画面の録画の画面: 録画するものを選べ、録画のボタンが押せる
         var recorderWindow = new RecorderWindow(settings)

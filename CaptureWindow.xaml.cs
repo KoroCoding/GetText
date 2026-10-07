@@ -78,10 +78,54 @@ public partial class CaptureWindow : Window
         var color = paused ? PausedColor : NormalColor;
         Resources["AccentBrush"] = new SolidColorBrush(color);
         OuterFrame.BorderBrush = new SolidColorBrush(Color.FromArgb(0x55, color.R, color.G, color.B));
-        PauseButton.Content = paused ? "" : ""; // Play / Pause
+        PauseButton.Content = WindowsIcons.Glyph(paused ? AppIcon.Play : AppIcon.Pause);
         PauseButton.ToolTip = paused ? "再開" : "一時停止";
         TitleText.Text = paused ? "GetText (停止中)" : "GetText";
     }
+
+    /// <summary>
+    /// 検索で見つかった所の印を枠の中に描く (位置は読み取った画像のピクセル)。今の一致 (active) は濃い色と太い枠で、
+    /// 色だけでなく枠の太さ・角の印でも区別する。この窓は画面の取り込みに写らないので、次の読み取りには入らない。
+    /// </summary>
+    public void SetHighlights(IReadOnlyList<MatchBox> boxes, int active)
+    {
+        HighlightLayer.Children.Clear();
+        if (boxes.Count == 0 || !CaptureArea.IsLoaded) return;
+        var dpi = VisualTreeHelper.GetDpi(CaptureArea);
+        var p = Theme.Colors;
+        foreach (var box in boxes)
+        {
+            bool current = box.MatchIndex == active;
+            var rect = new System.Windows.Shapes.Rectangle
+            {
+                Width = Math.Max(4, (box.Right - box.Left) / dpi.DpiScaleX + 4),
+                Height = Math.Max(4, (box.Bottom - box.Top) / dpi.DpiScaleY + 4),
+                RadiusX = 3,
+                RadiusY = 3,
+                Fill = new SolidColorBrush(Theme.ToColor(current ? p.SearchHighlightActive : p.SearchHighlight)) { Opacity = current ? 0.45 : 0.3 },
+                Stroke = new SolidColorBrush(Theme.ToColor(current ? p.SearchHighlightActiveBorder : p.SearchHighlightBorder)),
+                StrokeThickness = current ? 3 : 1.5,
+            };
+            System.Windows.Controls.Canvas.SetLeft(rect, box.Left / dpi.DpiScaleX - 2);
+            System.Windows.Controls.Canvas.SetTop(rect, box.Top / dpi.DpiScaleY - 2);
+            HighlightLayer.Children.Add(rect);
+            if (current)
+            {
+                // 今の一致: 左に縦の印も付ける
+                var mark = new System.Windows.Shapes.Rectangle
+                {
+                    Width = 4, Height = rect.Height, RadiusX = 2, RadiusY = 2,
+                    Fill = new SolidColorBrush(Theme.ToColor(p.SearchHighlightActiveBorder)),
+                };
+                System.Windows.Controls.Canvas.SetLeft(mark, box.Left / dpi.DpiScaleX - 9);
+                System.Windows.Controls.Canvas.SetTop(mark, box.Top / dpi.DpiScaleY - 2);
+                HighlightLayer.Children.Add(mark);
+            }
+        }
+    }
+
+    /// <summary>描いている印の数 (動作確認用)。</summary>
+    internal int HighlightCount => HighlightLayer.Children.Count;
 
     private System.Windows.Threading.DispatcherTimer? _flashTimer;
 

@@ -25,7 +25,7 @@ public interface IMinutesHost
     Translator Translator { get; }
 
     /// <summary>設定を開く (議事録の画面の「設定」)。</summary>
-    void OpenSettings(int tab = 0, Window? owner = null) { }
+    void OpenSettings(SettingsPage page = SettingsPage.Meetings, Window? owner = null) { }
 
     /// <summary>議事録の表示・文字の大きさを変えた (開いている設定の画面にも反映する)。</summary>
     void MinutesDisplayChanged() { }
@@ -39,6 +39,33 @@ public partial class MinutesWindow : Window
 {
     private static readonly string AutoSaveDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GetText", "minutes");
+
+    /// <summary>自動保存した議事録のフォルダ (ホームの「最近の議事録」・コマンドの一覧で使う)。</summary>
+    public static string RecentFolder => AutoSaveDir;
+
+    /// <summary>最近の議事録を開く (記録中などで開けなければ、その理由を状態の欄に出す)。</summary>
+    internal void OpenRecent(string path)
+    {
+        if (_busy || _service.IsRecording || _service.IsTranscribingFile)
+        {
+            SetStatus("記録中・文字起こし中は開けません。停止してから開いてください");
+            return;
+        }
+        LeaveTextBox();
+        _ = OpenPathAsync(path);
+    }
+
+    /// <summary>記録を始める / 止める (記録のボタンと同じ)。</summary>
+    internal void ToggleRecording()
+    {
+        if (RecordButton.IsEnabled) Record_Click(RecordButton, new RoutedEventArgs());
+    }
+
+    /// <summary>ファイルから文字起こしする (「ファイルから…」と同じ)。</summary>
+    internal void TranscribeFile()
+    {
+        if (FileButton.IsEnabled && !_service.IsTranscribingFile) File_Click(FileButton, new RoutedEventArgs());
+    }
 
     private readonly IMinutesHost _host;
     private readonly AppSettings _settings;
@@ -372,16 +399,17 @@ public partial class MinutesWindow : Window
     /// <summary>警告やエラーを、下の欄の上に目立つ帯で出す (閉じるまで残る)。severity は info / warning / error。</summary>
     internal void ShowNotice(string text, string severity = "warning", string? action = null, Action? onAction = null)
     {
-        var (icon, color) = severity switch
+        // その場の帯: 色はデザイントークンの状態の色、アイコン (線の絵) と文字でも種類を示す
+        var (icon, color, subtle) = severity switch
         {
-            "error" => ("⛔", "#C42B1C"),
-            "info" => ("ℹ️", "#0067C0"),
-            _ => ("⚠️", "#9D5D00"),
+            "error" => (AppIcon.Error, (Func<Palette, uint>)(p => p.Critical), (Func<Palette, uint>)(p => p.CriticalSubtle)),
+            "info" => (AppIcon.Info, p => p.AccentText, p => p.AccentSubtle),
+            _ => (AppIcon.Warning, p => p.Warning, p => p.WarningSubtle),
         };
-        var c = Color.Parse(color);
-        NoticeBar.Background = new SolidColorBrush(Color.FromArgb(0x22, c.R, c.G, c.B));
-        NoticeBar.BorderBrush = new SolidColorBrush(Color.FromArgb(0x66, c.R, c.G, c.B));
-        NoticeIcon.Text = icon;
+        NoticeBar.Background = MacTheme.BrushOf(subtle);
+        NoticeBar.BorderBrush = MacTheme.BrushOf(p => p.Border);
+        NoticeIcon.Icon = icon;
+        NoticeIcon.Foreground = MacTheme.BrushOf(color);
         NoticeText.Text = text;
         _noticeAction = onAction;
         NoticeAction.Content = action;
@@ -1014,18 +1042,18 @@ public partial class MinutesWindow : Window
     private void SetState(string state, string? text = null)
     {
         if (!App.DemoMode) Dispatcher.UIThread.Post(_host.MinutesStateChanged); // 機能を選ぶ画面の「記録中」
-        var (color, label) = state switch
+        // 状態の印: 点の色と薄い背景 (デザイントークンの状態の色)。文字でも状態を書く (色だけに頼らない)
+        var (dot, fill, label) = state switch
         {
-            "loading" => ("#D97706", "準備中"),
-            "ready" => ("#16A34A", "準備完了"),
-            "recording" => ("#DC2626", "記録中"),
-            "file" => ("#2563EB", "文字起こし中"),
-            "error" => ("#DC2626", "止まりました"),
-            _ => ("#808080", "未セットアップ"),
+            "loading" => ((Func<Palette, uint>)(p => p.Warning), (Func<Palette, uint>)(p => p.WarningSubtle), "準備中"),
+            "ready" => (p => p.Success, p => p.SuccessSubtle, "準備完了"),
+            "recording" => (p => p.Critical, p => p.CriticalSubtle, "記録中"),
+            "file" => (p => p.AccentText, p => p.AccentSubtle, "文字起こし中"),
+            "error" => (p => p.Critical, p => p.CriticalSubtle, "止まりました"),
+            _ => (p => p.TextTertiary, p => p.SurfaceSecondary, "未セットアップ"),
         };
-        var c = Color.Parse(color);
-        StateDot.Fill = new SolidColorBrush(c);
-        StateBadge.Background = new SolidColorBrush(Color.FromArgb(0x30, c.R, c.G, c.B));
+        StateDot.Fill = MacTheme.BrushOf(dot);
+        StateBadge.Background = MacTheme.BrushOf(fill);
         StateText.Text = text ?? label;
         _state = state;
         UpdateTitle();
@@ -1421,6 +1449,7 @@ public partial class MinutesWindow : Window
     // ⌘F で検索、⌘S で保存、⌘O で開く、⌘M でメモ、⌘B で ★、⌘ + (+ / - / 0) で文字の大きさ
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
+        if (AppCommands.HandleKey(this, e, CommandContext.Meeting)) return; // ⌘K: コマンドの一覧
         if (e.Key == Key.Escape && _playing != null && FocusManager?.GetFocusedElement() is not TextBox)
         {
             StopPlayback();
@@ -1495,7 +1524,7 @@ public partial class MinutesWindow : Window
     // ───────── 表示 (時刻・相づち) ─────────
 
     /// <summary>設定を議事録のページで開く。</summary>
-    private void Settings_Click(object? sender, RoutedEventArgs e) => _host.OpenSettings(SettingsWindow.MinutesTab, this);
+    private void Settings_Click(object? sender, RoutedEventArgs e) => _host.OpenSettings(SettingsPage.Meetings, this);
 
     /// <summary>設定の画面で変えた議事録の表示を、この画面にも反映する。</summary>
     public void ApplyDisplaySetting(string name)

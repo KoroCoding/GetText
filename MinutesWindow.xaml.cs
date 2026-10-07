@@ -185,6 +185,38 @@ public partial class MinutesWindow : Window
     private static readonly string AutoSaveDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GetText", "minutes");
 
+    /// <summary>自動保存した議事録のフォルダ (ホームの「最近の議事録」・コマンドの一覧で使う)。</summary>
+    public static string RecentFolder => AutoSaveDir;
+
+    // ───────── コマンドの一覧・ホームから ─────────
+
+    /// <summary>最近の議事録を開く (記録中などで開けなければ、その理由を状態の欄に出す)。</summary>
+    internal void OpenRecent(string path)
+    {
+        if (_busy || _service.IsRecording || _service.IsTranscribingFile)
+        {
+            SetStatus("記録中・文字起こし中は開けません。停止してから開いてください");
+            return;
+        }
+        LeaveTextBox();
+        OpenPath(path);
+    }
+
+    /// <summary>記録を始める / 止める (記録のボタンと同じ)。</summary>
+    internal void ToggleRecording()
+    {
+        if (RecordButton.IsEnabled) Record_Click(RecordButton, new RoutedEventArgs());
+    }
+
+    /// <summary>ファイルから文字起こしする (「ファイルから…」と同じ)。</summary>
+    internal void TranscribeFile()
+    {
+        if (FileButton.IsEnabled && !_service.IsTranscribingFile) File_Click(FileButton, new RoutedEventArgs());
+    }
+
+    /// <summary>記録中か。</summary>
+    internal bool IsRecording => _service.IsRecording;
+
     private readonly TextWindow _host;
     private readonly AppSettings _settings;
     private readonly TranscriptionService _service = new();
@@ -516,7 +548,7 @@ public partial class MinutesWindow : Window
     private void OpenSetup_Click(object sender, RoutedEventArgs e) => OpenSetup();
 
     /// <summary>設定の「情報」(セットアップ) を開く。</summary>
-    private void OpenSetup() => _host.OpenSettings(5);
+    private void OpenSetup() => _host.OpenSettings(SettingsPage.Models);
 
     private void LoadingHide_Click(object sender, RoutedEventArgs e)
     {
@@ -534,19 +566,21 @@ public partial class MinutesWindow : Window
     {
         _state = state;
         if (!App.DemoMode) Dispatcher.BeginInvoke(_host.MinutesStateChanged); // 機能を選ぶ画面の「記録中」
-        var (color, label) = state switch
+        // 状態の印: 点の色と薄い背景 (デザイントークンの状態の色)。文字でも状態を書く (色だけに頼らない)
+        Func<Palette, uint> dot, fill;
+        string label;
+        (dot, fill, label) = state switch
         {
-            "loading" => ("#D97706", "準備中"),
-            "ready" when text != null => ("#6B7280", text),
-            "ready" => ("#16A34A", "準備完了"),
-            "recording" => ("#DC2626", "記録中"),
-            "file" => ("#2563EB", "文字起こし中"),
-            "error" => ("#DC2626", "止まりました"),
-            _ => ("#808080", "未セットアップ"),
+            "loading" => ((Func<Palette, uint>)(p => p.Warning), (Func<Palette, uint>)(p => p.WarningSubtle), "準備中"),
+            "ready" when text != null => (p => p.TextTertiary, p => p.SurfaceSecondary, text),
+            "ready" => (p => p.Success, p => p.SuccessSubtle, "準備完了"),
+            "recording" => (p => p.Critical, p => p.CriticalSubtle, "記録中"),
+            "file" => (p => p.AccentText, p => p.AccentSubtle, "文字起こし中"),
+            "error" => (p => p.Critical, p => p.CriticalSubtle, "止まりました"),
+            _ => (p => p.TextTertiary, p => p.SurfaceSecondary, "未セットアップ"),
         };
-        var c = (Color)ColorConverter.ConvertFromString(color);
-        StateDot.Fill = new SolidColorBrush(c);
-        StateBadge.Background = new SolidColorBrush(Color.FromArgb(0x30, c.R, c.G, c.B));
+        StateDot.Fill = Theme.Brush(dot);
+        StateBadge.Background = Theme.Brush(fill);
         StateText.Text = text ?? label;
         System.Windows.Automation.AutomationProperties.SetName(StateBadge, "状態: " + StateText.Text);
         bool busy = state is "recording" or "file";
@@ -566,7 +600,7 @@ public partial class MinutesWindow : Window
             "recording" => "記録しています。話し終わってから数秒で文字になります",
             "file" => "ファイルを文字起こししています",
             "error" => "文字起こしの処理が止まりました。もう一度「記録を開始」を押すと起動し直します",
-            _ => "設定 → セットアップ・情報 → 「セットアップを実行」で音声認識を入れてください",
+            _ => "設定 → モデルとセットアップ → 「セットアップを実行」で音声認識を入れてください",
         };
     }
 
@@ -603,18 +637,17 @@ public partial class MinutesWindow : Window
     private void ShowNotice(string text, string severity = "warning", string? action = null, Action? onAction = null, string kind = "")
     {
         _noticeKind = kind;
-        var (icon, color) = severity switch
+        // その場の帯 (InfoBar): 色はデザイントークンの状態の色、アイコンと文字でも種類を示す
+        var (icon, color, subtle) = severity switch
         {
-            "error" => ("\uEA39", "#C42B1C"),
-            "info" => ("\uE946", "#0067C0"),
-            _ => ("\uE7BA", "#9D5D00"),
+            "error" => (AppIcon.Error, (Func<Palette, uint>)(p => p.Critical), (Func<Palette, uint>)(p => p.CriticalSubtle)),
+            "info" => (AppIcon.Info, p => p.AccentText, p => p.AccentSubtle),
+            _ => (AppIcon.Warning, p => p.Warning, p => p.WarningSubtle),
         };
-        var c = (Color)ColorConverter.ConvertFromString(color);
-        NoticeBar.Background = new SolidColorBrush(Color.FromArgb(0x22, c.R, c.G, c.B));
-        NoticeBar.BorderBrush = new SolidColorBrush(Color.FromArgb(0x66, c.R, c.G, c.B));
-        bool dark = TryFindResource("TextFillColorPrimaryBrush") is SolidColorBrush fg && SpeakerColors.Luminance(fg.Color) > 0.5;
-        NoticeIcon.Foreground = new SolidColorBrush(dark ? SpeakerColors.ForText(c, dark: true) : c);
-        NoticeIcon.Text = icon;
+        NoticeBar.Background = Theme.Brush(subtle);
+        NoticeBar.SetResourceReference(Border.BorderBrushProperty, "Gt.Border");
+        NoticeIcon.Foreground = Theme.Brush(color);
+        NoticeIcon.Text = WindowsIcons.Glyph(icon);
         NoticeText.Text = text;
         _noticeAction = onAction;
         NoticeAction.Content = action;
@@ -1745,6 +1778,7 @@ public partial class MinutesWindow : Window
     // Ctrl+F で検索、Ctrl+S で保存、Ctrl+O で開く、Ctrl + (+ / - / 0) で文字の大きさ
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
+        if (AppCommands.HandleKey(this, e, CommandContext.Meeting)) return; // Ctrl+K: コマンドの一覧
         if (e.Key == Key.Escape && _playing != null && Keyboard.FocusedElement is not TextBox)
         {
             StopPlayback();
@@ -1905,7 +1939,7 @@ public partial class MinutesWindow : Window
     // ───────── 表示 (時刻・相づち) ─────────
 
     /// <summary>設定を議事録のページで開く。</summary>
-    private void Settings_Click(object sender, RoutedEventArgs e) => _host.OpenSettings(SettingsWindow.MinutesTab, this);
+    private void Settings_Click(object sender, RoutedEventArgs e) => _host.OpenSettings(SettingsPage.Meetings, this);
 
     /// <summary>設定の画面で変えた議事録の表示を、この画面にも反映する。</summary>
     public void ApplyDisplaySetting(string name)

@@ -64,6 +64,7 @@ public partial class RecorderWindow : Window
         FolderText.Text = Folder;
         PreviewCheck.IsChecked = settings.RecordPreview;
         _clock.Tick += (_, _) => UpdateClock();
+        AddHandler(KeyDownEvent, (_, e) => AppCommands.HandleKey(this, e, CommandContext.Recording), Avalonia.Interactivity.RoutingStrategies.Tunnel); // ⌘K: コマンドの一覧
         _previewTimer.Tick += async (_, _) => await UpdatePreviewAsync();
         Closed += (_, _) =>
         {
@@ -245,6 +246,18 @@ public partial class RecorderWindow : Window
     }
 
     // ───────── 録画 ─────────
+
+    /// <summary>録画を始める / 止める (コマンドの一覧から。録画のボタンと同じ)。</summary>
+    internal void ToggleRecording()
+    {
+        if (RecordButton.IsEnabled) Record_Click(RecordButton, new RoutedEventArgs());
+    }
+
+    /// <summary>保存先のフォルダを開く (コマンドの一覧から)。</summary>
+    internal void OpenFolder() => OpenFolder_Click(this, new RoutedEventArgs());
+
+    /// <summary>設定で保存先を変えたとき、表示を合わせる。</summary>
+    internal void ReloadFolder() => FolderText.Text = Folder;
 
     private async void Record_Click(object? sender, RoutedEventArgs e)
     {
