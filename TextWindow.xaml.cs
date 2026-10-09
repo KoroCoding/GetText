@@ -273,6 +273,7 @@ public partial class TextWindow : Window
         _lastLines = lines;
         _lastFromAi = true;
         _lastCaptureHeight = height;
+        _positionsStale = false; // (見本も、今の枠で読み取った 1 回として扱う)
         _lastSegments = pixels != null && _settings.OcrView == OcrView.Groups ? OcrLayout.FindSegments(pixels, width, height, lines) : [];
         UpdateDocument(fromNewFrame: true);
         if (translation != null) _translationPane.Set(translation);

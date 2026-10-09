@@ -100,6 +100,8 @@ public partial class TextWindow : Window, IMinutesHost
     private const string OverlayOwner = "reading.translation";
     /// <summary>読み取った位置が今の画面と合わない (枠を動かした後、まだ読み直していない)。枠の上の印を出さない。</summary>
     private bool _positionsStale;
+    /// <summary>読み取ったときの枠の位置と大きさ (同じ位置への知らせは「動かした」としない)。</summary>
+    private (PixelPoint Position, Size Size)? _readFrame;
     private const string HoldNote = "選択中のため更新を保留中";
 
     private bool _translating;
@@ -830,6 +832,7 @@ public partial class TextWindow : Window, IMinutesHost
         double s = _capture.DesktopScaling > 0 ? _capture.DesktopScaling : 1;
         _positionsStale = moves != _frameMoves;
         _readOrigin = !_positionsStale ? (origin.X, origin.Y, pixelScale > 0 ? s / pixelScale : 1) : null;
+        if (!_positionsStale) _readFrame = (_capture.Position, _capture.CaptureSize);
     }
 
     /// <summary>
@@ -852,6 +855,7 @@ public partial class TextWindow : Window, IMinutesHost
     /// <summary>枠を動かした・大きさを変えた: 読み取った位置は今の画面と合わないので、重ねた訳を消す (次に読み取ったら出し直す)。</summary>
     private void ForgetReadPositions()
     {
+        if (_readFrame is { } read && read == (_capture.Position, _capture.CaptureSize)) return; // (動いていない: 窓を出したときの知らせなど)
         _frameMoves++;
         _forceNext = true; // (動かした先がたまたま同じ画像でも、読み直して位置を決め直す)
         if (!_positionsStale)
@@ -1327,6 +1331,8 @@ public partial class TextWindow : Window, IMinutesHost
         _lastFromAi = true;
         _lastCaptureHeight = height;
         _lastPixelScale = pixelScale;
+        _positionsStale = false; // (見本も、今の枠で読み取った 1 回として扱う)
+        _readFrame = (_capture.Position, _capture.CaptureSize);
         _lastSegments = pixels != null && _settings.OcrView == OcrView.Groups ? OcrLayout.FindSegments(pixels, width, height, lines) : [];
         UpdateDocument(fromNewFrame: true);
         if (translation != null) _translationPane.Set(translation);
