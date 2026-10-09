@@ -282,6 +282,24 @@ public class PluginCatalogTests : IDisposable
     }
 
     [Fact]
+    public async Task ReEnabledPluginIsNotShownAsBroken()
+    {
+        // 前回落ちて止めた拡張機能を有効に戻した: 起動したときの「止めました」は古いので、「再起動すると使えます」と出す
+        Bundle(("gettext.alpha", "1.0.0", "1.0.0", "[]", false));
+        var c = Catalog();
+        await c.InstallAsync(c.Available()[0].Entry!, null, null, CancellationToken.None);
+        c.Store.ApplyPending();
+        c.Store.SetEnabled("gettext.alpha", false);
+        var record = c.Store.Find("gettext.alpha")!;
+        _loaded.Add(new LoadedPlugin { Record = record, Loaded = false, Error = "前回この拡張機能の読み込み中に問題が発生したため、止めました", DisabledAtLoad = true });
+        Assert.Equal(PluginItemState.Disabled, c.Installed()[0].State);
+
+        c.Store.SetEnabled("gettext.alpha", true);
+        Assert.Equal(PluginItemState.RestartRequired, c.Installed()[0].State);
+        Assert.Equal("再起動すると使えます", c.Installed()[0].Detail);
+    }
+
+    [Fact]
     public void FilterMatchesNamePublisherAndPermissionLabels()
     {
         Bundle(("gettext.alpha", "1.0.0", "1.0.0", "[\"network\"]", false),

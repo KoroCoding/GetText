@@ -31,9 +31,7 @@ public sealed class WindowsPluginHost : IPluginHostUi
         PluginRuntime.RegisterService<IOcrService>(new HostOcrService([new AiOcrProvider(text.AiOcr), new WindowsOcrProvider()], () => text.PreferredOcrProvider));
         PluginRuntime.RegisterService<ITranslationService>(new LocalTranslationService(text.Translator.Local));
         PluginRuntime.RegisterService<IDocumentService>(new WindowsDocumentService());
-        var overlay = new WindowsOverlayService(() => text.IsOcrVisible);
-        text.OcrHidden += overlay.ClearAll;
-        PluginRuntime.RegisterService<IOverlayService>(overlay);
+        PluginRuntime.RegisterService<IOverlayService>(text.Overlay); // (読み取りの画面と同じ部品。隠すと消える)
         // 開発者向けの API (既定でオフ。設定でオンにしたときだけ 127.0.0.1 で受ける)
         DeveloperApiControl.Host = new DeveloperApiHost
         {

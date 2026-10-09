@@ -33,9 +33,7 @@ public sealed class MacPluginHost : IPluginHostUi
         PluginRuntime.RegisterService<IOcrService>(new HostOcrService([new AiOcrProvider(text.AiOcr), new VisionOcrProvider()], () => text.PreferredOcrProvider));
         PluginRuntime.RegisterService<ITranslationService>(new LocalTranslationService(text.Translator.Local));
         PluginRuntime.RegisterService<IDocumentService>(new MacDocumentService());
-        var overlay = new MacOverlayService(() => text.IsOcrVisible);
-        text.OcrHidden += overlay.ClearAll;
-        PluginRuntime.RegisterService<IOverlayService>(overlay);
+        PluginRuntime.RegisterService<IOverlayService>(text.Overlay); // (読み取りの画面と同じ部品。隠すと消える)
         // 開発者向けの API (既定でオフ。設定でオンにしたときだけ 127.0.0.1 で受ける)
         DeveloperApiControl.Host = new DeveloperApiHost
         {
@@ -259,6 +257,8 @@ public sealed class PluginToast : Window
     private readonly DispatcherTimer _timer = new();
     private Action? _onAction;
     private bool _closed;
+    /// <summary>進み具合の知らせ (終わるまで): × で閉じると中止する。古い知らせとして押し出さない。</summary>
+    private Action? _cancelOnClose;
 
     private PluginToast()
     {
@@ -285,7 +285,11 @@ public sealed class PluginToast : Window
         ToolTip.SetTip(close, "閉じる");
         Avalonia.Automation.AutomationProperties.SetName(close, "知らせを閉じる");
         close.Bind(ForegroundProperty, close.GetResourceObservable("Gt.TextSecondary"));
-        close.Click += (_, _) => Close();
+        close.Click += (_, _) =>
+        {
+            _cancelOnClose?.Invoke(); // (進み具合の知らせを閉じたら、作業も止める: 見えないまま続けない)
+            Close();
+        };
         _action.Click += (_, _) =>
         {
             var action = _onAction;
@@ -364,13 +368,15 @@ public sealed class PluginToast : Window
         toast._action.Content = "中止";
         toast._onAction = handle.Cancel;
         toast._action.IsVisible = true;
+        toast._cancelOnClose = handle.Cancel;
         toast.Display();
         return handle;
     }
 
     private static PluginToast Create()
     {
-        while (Open.Count >= MaxOpen) Open[0].Close();
+        // 古いものから閉じる。進み具合 (作業中) は閉じない (閉じると中止ボタンが無くなるため)
+        while (Open.Count >= MaxOpen && Open.FirstOrDefault(t => t._cancelOnClose == null) is { } old) old.Close();
         var toast = new PluginToast();
         Open.Add(toast);
         return toast;
@@ -449,6 +455,7 @@ public sealed class PluginToast : Window
         {
             if (_done || toast._closed) return;
             _done = true;
+            toast._cancelOnClose = null;
             toast._progress.IsVisible = false;
             toast._action.IsVisible = false;
             toast.Set(toast._title.Text ?? "", message?.For("ja") ?? (failed ? "できませんでした" : "終わりました"),

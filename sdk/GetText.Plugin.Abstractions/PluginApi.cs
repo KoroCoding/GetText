@@ -140,10 +140,24 @@ public enum PluginFeatureState
 
 public sealed record PluginFeatureStatus(PluginFeatureState State, LocalizedText? Label = null);
 
-/// <summary>ホームのタイルに出す機能。</summary>
+/// <summary>機能を出す場所。</summary>
+public enum PluginFeaturePlacement
+{
+    /// <summary>ホームのタイル (ひとりで使える機能)。</summary>
+    Home,
+    /// <summary>
+    /// 読み取りの画面の「表示」メニューの切り替え (読み取りの画面が読んだ文字を使う機能。読み取りの画面を開いていないと動かないので、
+    /// ホームには出さない)。Close が要る (無ければホームに出す)。
+    /// </summary>
+    ReadingWindow,
+}
+
+/// <summary>ホームのタイル (または読み取りの画面の切り替え) に出す機能。</summary>
 public sealed class PluginFeature
 {
     public required string Id { get; init; }
+    /// <summary>出す場所 (既定はホーム)。</summary>
+    public PluginFeaturePlacement Placement { get; init; } = PluginFeaturePlacement.Home;
     public required LocalizedText Name { get; init; }
     public required LocalizedText Description { get; init; }
     public PluginIcon Icon { get; init; } = "Extensions";

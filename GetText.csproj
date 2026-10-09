@@ -34,6 +34,10 @@
     <Compile Remove="sdk\**;plugins\**" />
     <None Remove="sdk\**;plugins\**" />
     <Page Remove="sdk\**;plugins\**" />
+    <!-- 開発の道具が作る作業用のコピー (.claude\worktrees など) は含めない (同じクラスが二重になってビルドできなくなる) -->
+    <Compile Remove=".claude\**" />
+    <None Remove=".claude\**" />
+    <Page Remove=".claude\**" />
     <InternalsVisibleTo Include="GetText.Tests" />
   </ItemGroup>
 

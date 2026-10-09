@@ -119,8 +119,9 @@ public static class MacQuickOcr
                 ? new PluginNotification($"{result.Lines.Count} 行をコピーしました", text.Length > 80 ? text[..80] + "…" : text, PluginNotificationKind.Success)
                 : new PluginNotification("コピーできませんでした", "クリップボードを使えませんでした。", PluginNotificationKind.Warning));
         }
-        catch (Exception ex) when (ex is InvalidOperationException or IOException or System.ComponentModel.Win32Exception or ArgumentException)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // (時間切れ・補助プロセスの終了なども、黙って失敗させずに知らせる)
             App.Log("QuickOcr", ex);
             PluginToast.Show("Quick OCR", new PluginNotification("読み取れませんでした", ex.Message, PluginNotificationKind.Error));
         }
@@ -137,6 +138,9 @@ public static class MacQuickOcr
     public static async Task<CapturedImage?> SelectAndCaptureAsync()
     {
         var file = Path.Combine(Path.GetTempPath(), $"gettext-region-{Guid.NewGuid():N}.png");
+        // macOS の範囲の選択は GetText の窓も写すので、選ぶ間は画面に重ねた訳・文字を出さない (読み取りが自分の訳を読まないように)
+        var overlay = PluginRuntime.GetService<IOverlayService>() as MacOverlayService;
+        overlay?.Suspend(true);
         try
         {
             var info = new ProcessStartInfo("/usr/sbin/screencapture") { UseShellExecute = false };
@@ -150,6 +154,7 @@ public static class MacQuickOcr
         }
         finally
         {
+            overlay?.Suspend(false);
             try { File.Delete(file); } catch (IOException) { }
         }
     }

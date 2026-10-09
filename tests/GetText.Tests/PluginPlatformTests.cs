@@ -322,6 +322,47 @@ public class PluginPlatformTests : IDisposable
     }
 
     [Fact]
+    public void FailedRollbackDoesNotSwitchVersionsForever()
+    {
+        // 新しい版も前の版も (落ちずに) 読み込めない: 前の版へ戻すのは 1 回だけで、起動のたびに版を行き来しない
+        var store = NewStore();
+        store.InstallFromFile(Zip("b1.gtplugin", ("plugin.json", Manifest(version: "1.0.0"))), null, PluginTrust.Community, PluginSource.LocalFile, hostVersion: Host);
+        store.InstallFromFile(Zip("b2.gtplugin", ("plugin.json", Manifest(version: "2.0.0"))), null, PluginTrust.Community, PluginSource.LocalFile, hostVersion: Host);
+        store = NewStore();
+        store.ApplyPending();
+        store.BeginLoading("gettext.sample");
+        store.EndLoading("gettext.sample", loaded: false); // 2.0.0 を読めなかった → 次の起動で 1.0.0 に戻す
+        Assert.Equal("1.0.0", store.Find("gettext.sample")!.PendingVersion);
+
+        store = NewStore();
+        store.ApplyPending();
+        Assert.Equal("1.0.0", store.Find("gettext.sample")!.Version);
+        store.BeginLoading("gettext.sample");
+        store.EndLoading("gettext.sample", loaded: false); // 戻した 1.0.0 も読めなかった
+        var r = store.Find("gettext.sample")!;
+        Assert.Null(r.PendingVersion); // 2.0.0 に戻し直さない
+        Assert.Null(r.PreviousVersion);
+        Assert.Contains("前の版でも読み込めませんでした", r.LastError);
+
+        store = NewStore();
+        store.ApplyPending();
+        Assert.Equal("1.0.0", store.Find("gettext.sample")!.Version);
+        Assert.False(Directory.Exists(store.VersionDirectory("gettext.sample", "2.0.0")));
+    }
+
+    [Fact]
+    public void RetiredPluginsAreNotLoadedOrInstalled()
+    {
+        // 「訳を重ねる」は GetText に組み込んだ: 前の版で入れた拡張機能は読み込まず、理由を出す。入れることもできない
+        var manifest = PluginManifests.Parse(Manifest(id: "gettext.translation-overlay"), out _)!;
+        Assert.Contains("組み込まれました", PluginCompatibility.Check(manifest, Host, PluginCompatibility.CurrentPlatform));
+        var store = NewStore();
+        var package = Zip("overlay.gtplugin", ("plugin.json", Manifest(id: "gettext.translation-overlay")));
+        var ex = Assert.Throws<PluginPackageException>(() => store.InstallFromFile(package, null, PluginTrust.Community, PluginSource.LocalFile, hostVersion: Host));
+        Assert.Contains("組み込まれました", ex.Message);
+    }
+
+    [Fact]
     public void LoadSucceededRemovesPreviousVersion()
     {
         var store = NewStore();

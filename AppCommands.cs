@@ -31,6 +31,12 @@ public static class AppCommands
             e.Handled = true;
             return true;
         }
+        // Ctrl+, (設定): コマンドの一覧に出しているキーなので、どの画面でも効くようにする (読み取りの画面は、読み取りのページを開く)
+        if (e.Key == Key.OemComma && Keyboard.Modifiers == ModifierKeys.Control && context != CommandContext.ScreenOcr && Registry.TryRun("settings.open"))
+        {
+            e.Handled = true;
+            return true;
+        }
         return false;
     }
 
@@ -57,7 +63,7 @@ public static class AppCommands
             IsInstalled = () => App.DemoMode || TranscriptionService.IsInstalled,
             DownloadSize = "約 4 GB",
             Status = () => text.Minutes is not { IsLoaded: true } m ? FeatureStatus.Closed
-                : m.IsBusy ? new FeatureStatus(FeatureState.Active, "記録中") : new FeatureStatus(FeatureState.Open, "開いています"),
+                : m.BusyLabel is { } busy ? new FeatureStatus(FeatureState.Active, busy) : new FeatureStatus(FeatureState.Open, "開いています"),
             Open = () => { text.OpenMinutes(); home?.AfterFeatureOpened(); },
             Close = () => text.Minutes?.Close(),
             Install = () => text.OpenSettings(SettingsPage.Models, home),
@@ -105,14 +111,15 @@ public static class AppCommands
         Registry.Register(new AppCommand { Id = "ocr.read", Title = "今すぐ読み取る", Keywords = ["Read now", "refresh", "OCR"], Icon = AppIcon.Refresh, Shortcut = "F5", Contexts = ocr, IsAvailable = OcrOpen, Execute = text.ReadNow });
         Registry.Register(new AppCommand { Id = "ocr.pause", Title = "自動読み取りを一時停止 / 再開", Keywords = ["Pause", "Resume", "停止"], Icon = AppIcon.Pause, Shortcut = "Ctrl+P", Contexts = ocr, IsAvailable = OcrOpen, Execute = text.TogglePause });
         Registry.Register(new AppCommand { Id = "ocr.search", Title = "読み取った文字を検索", Keywords = ["Search", "Find", "けんさく", "探す"], Icon = AppIcon.Search, Shortcut = "Ctrl+F", Contexts = ocr, IsAvailable = OcrOpen, Execute = text.ShowSearch });
-        Registry.Register(new AppCommand { Id = "ocr.view.groups", Title = "枠・まとまりごとに表示", Subtitle = "名簿や表を枠ごとに分けて読む", Keywords = ["Layout", "Group", "枠", "表", "グループ"], Icon = AppIcon.Groups, Contexts = ocr, IsAvailable = () => OcrOpen() && settings.OcrView != OcrView.Groups, Execute = () => text.SetView(OcrView.Groups) });
+        Registry.Register(new AppCommand { Id = "ocr.view.groups", Title = "枠・まとまりごとに表示", Subtitle = "名簿や表を枠ごとに分けて読む", Keywords = ["Layout", "Group", "枠", "表", "グループ"], Icon = AppIcon.Groups, Contexts = ocr, IsAvailable = () => OcrOpen() && settings.OcrView != OcrView.Groups && !text.IsAccumulating, Execute = () => text.SetView(OcrView.Groups) });
         Registry.Register(new AppCommand { Id = "ocr.view.text", Title = "上から順に表示", Keywords = ["Layout", "Text", "通常"], Icon = AppIcon.Layout, Contexts = ocr, IsAvailable = () => OcrOpen() && settings.OcrView != OcrView.Text, Execute = () => text.SetView(OcrView.Text) });
         Registry.Register(new AppCommand { Id = "ocr.accumulate", Title = "蓄積 (スクロールしながら集める) の開始 / 終了", Keywords = ["Accumulate", "collect", "長い文書"], Icon = AppIcon.Accumulate, Contexts = ocr, IsAvailable = OcrOpen, Execute = text.ToggleAccumulate });
+        Registry.Register(new AppCommand { Id = "ocr.overlay", Title = "訳を画面に重ねる / やめる", Subtitle = "読み取りの枠の中の外国語の文に、日本語の訳を重ねる", Keywords = ["Overlay", "translation overlay", "翻訳", "重ねる", "訳"], Icon = AppIcon.Translate, Contexts = ocr, IsAvailable = OcrOpen, Execute = text.ToggleOverlay });
         Registry.Register(new AppCommand { Id = "ocr.copy", Title = "原文をコピー", Keywords = ["Copy", "original"], Icon = AppIcon.Copy, Shortcut = "Ctrl+Shift+C", Contexts = ocr, IsAvailable = OcrOpen, Execute = text.CopyOriginal });
         Registry.Register(new AppCommand { Id = "ocr.copyTranslation", Title = "日本語訳をコピー", Keywords = ["Copy", "translation"], Icon = AppIcon.Copy, Shortcut = "Ctrl+Shift+T", Contexts = ocr, IsAvailable = () => OcrOpen() && settings.Translate, Execute = text.CopyTranslation });
         Registry.Register(new AppCommand { Id = "ocr.pin", Title = "常に手前に表示 (切り替え)", Keywords = ["Pin", "Topmost", "always on top", "固定"], Icon = AppIcon.Pin, Contexts = ocr, IsAvailable = OcrOpen, Execute = text.TogglePin });
         Registry.Register(new AppCommand { Id = "ocr.close", Title = "文字の読み取りを閉じる", Keywords = ["Close OCR"], Icon = AppIcon.Close, IsAvailable = OcrOpen, Execute = text.CloseOcr });
-        Registry.Register(new AppCommand { Id = "ocr.quick", Title = "範囲を選んで文字をコピー (Quick OCR)", Subtitle = "読み取りの画面を開かずに 1 回だけ読む", Keywords = ["Quick OCR", "Silent OCR", "範囲", "スクリーンショット", "コピー"], Icon = AppIcon.ScreenOcr, Shortcut = HotkeyText.For(settings, "quick-ocr"), Execute = QuickOcr.Run });
+        Registry.Register(new AppCommand { Id = "ocr.quick", Title = "範囲を選んで文字をコピー (Quick OCR)", Subtitle = "読み取りの画面を開かずに 1 回だけ読む", Keywords = ["Quick OCR", "Silent OCR", "範囲", "スクリーンショット", "コピー"], Icon = AppIcon.ScreenOcr, ShortcutSource = () => HotkeyText.For(settings, "quick-ocr"), Execute = QuickOcr.Run });
 
         // 議事録
         CommandContext[] meeting = [CommandContext.Meeting];

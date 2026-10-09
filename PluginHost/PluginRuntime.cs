@@ -27,6 +27,8 @@ public sealed class LoadedPlugin
     public PluginManifest? Manifest { get; init; }
     public bool Loaded { get; set; }
     public string? Error { get; set; }
+    /// <summary>読み込んだ (起動した) ときは止めていた (そのときの問題の表示は、有効に戻した後は古い)。</summary>
+    public bool DisabledAtLoad { get; init; }
     public TimeSpan LoadTime { get; set; }
     public IGetTextPlugin? Instance { get; set; }
     public PluginContext? Context { get; set; }
@@ -107,7 +109,7 @@ public static class PluginRuntime
         var candidates = new List<PluginManifest>();
         foreach (var (record, manifest, error) in installed)
         {
-            var item = new LoadedPlugin { Record = record, Manifest = manifest, Error = error ?? record.LastError };
+            var item = new LoadedPlugin { Record = record, Manifest = manifest, Error = error ?? record.LastError, DisabledAtLoad = !record.Enabled };
             _plugins.Add(item);
             if (manifest == null || !record.Enabled || SafeMode) continue;
             if (PluginCompatibility.Check(manifest, PluginCompatibility.HostVersion, PluginCompatibility.CurrentPlatform) is { } why)
@@ -351,6 +353,8 @@ public sealed class PluginContext : IPluginContext
             Close = feature.Close is { } close ? () => Run(close, name) : null,
             Local = !_manifest.Permissions.Contains("network"),
             Publisher = _manifest.Publisher,
+            // (読み取りの画面の切り替えは、切る (Close) が無いと戻せないので、無ければホームに出す)
+            InReadingWindow = feature.Placement == PluginFeaturePlacement.ReadingWindow && feature.Close != null,
         });
     }
 

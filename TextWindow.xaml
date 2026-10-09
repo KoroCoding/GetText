@@ -18,7 +18,7 @@
             <MenuItem x:Name="ConvertMenu" Header="文字変換"/>
         </ContextMenu>
 
-        <!-- 「表示」のメニュー: 並べ方・訳の位置・蓄積 -->
+        <!-- 「表示」のメニュー: 並べ方・訳の位置・訳を重ねる・蓄積 -->
         <ContextMenu x:Key="ViewMenu" Opened="ViewMenu_Opened" Closed="Menu_Closed">
             <MenuItem x:Name="ViewTextItem" Header="上から順" IsCheckable="True" Click="ViewText_Click"
                       ToolTip="画面どおり、上から順に並べます"/>
@@ -27,6 +27,8 @@
             <Separator/>
             <MenuItem x:Name="LayoutBelowItem" Header="日本語訳を原文の下に" IsCheckable="True" Click="LayoutBelow_Click"/>
             <MenuItem x:Name="LayoutRightItem" Header="日本語訳を原文の右に" IsCheckable="True" Click="LayoutRight_Click"/>
+            <MenuItem x:Name="OverlayItem" Header="訳を画面に重ねる" IsCheckable="True" Click="OverlayItem_Click"
+                      ToolTip="読み取りの枠の中の外国語の文に、日本語の訳をその位置で重ねます (訳は日本語訳の欄と同じ。クリックは下の窓に通ります)"/>
             <Separator/>
             <MenuItem x:Name="AccumulateItem" Header="蓄積 (スクロールしながら集める)" IsCheckable="True" Click="AccumulateItem_Click"
                       ToolTip="スクロールしながら読んだ内容を、重複なしでつなげて集めます (長い文書の取り込み用)"/>

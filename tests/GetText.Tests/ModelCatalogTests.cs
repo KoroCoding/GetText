@@ -92,6 +92,25 @@ public class ModelCatalogTests : IDisposable
         ModelCatalog.Remove(ModelCatalog.Find("fugumt-en-ja")!, _dir);
         Assert.False(Directory.Exists(Path.Combine(_dir, "fugumt-en-ja")));
         Assert.True(Directory.Exists(Path.Combine(_dir, "speaker-campplus")));
+        Assert.Empty(Directory.GetDirectories(_dir, "*.removing-*"));
+    }
+
+    [Fact]
+    public void ModelInUseIsNotPartlyRemoved()
+    {
+        // 使用中のファイルがあると、何も消さずに知らせる (途中まで消してモデルを壊さない)
+        var dir = Path.Combine(_dir, "fugumt-en-ja");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "a.bin"), "x");
+        File.WriteAllText(Path.Combine(dir, "b.bin"), "y");
+        using (File.Open(Path.Combine(dir, "b.bin"), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var ex = Assert.Throws<IOException>(() => ModelCatalog.Remove(ModelCatalog.Find("fugumt-en-ja")!, _dir));
+            Assert.Contains("何も消していません", ex.Message);
+            Assert.True(File.Exists(Path.Combine(dir, "a.bin")));
+        }
+        ModelCatalog.Remove(ModelCatalog.Find("fugumt-en-ja")!, _dir);
+        Assert.False(Directory.Exists(dir));
     }
 
     [Theory]

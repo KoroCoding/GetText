@@ -31,6 +31,7 @@ public partial class SettingsWindow
         if (MessageBox.Show(this, ModelTexts.ConfirmInstall(status), "モデルを入れる", MessageBoxButton.YesNo,
                 status.Model.NonCommercial ? MessageBoxImage.Warning : MessageBoxImage.Question, MessageBoxResult.Yes) != MessageBoxResult.Yes) return;
         _modelCancel = new CancellationTokenSource();
+        Closing += OnClosingDuringInstall;
         ModelErrorBar.Visibility = Visibility.Collapsed;
         ModelProgressPanel.Visibility = Visibility.Visible;
         ModelProgressText.Text = $"「{status.Model.Name}」を入れています";
@@ -58,6 +59,7 @@ public partial class SettingsWindow
         }
         finally
         {
+            Closing -= OnClosingDuringInstall;
             _modelCancel.Dispose();
             _modelCancel = null;
             ModelProgressPanel.Visibility = Visibility.Collapsed;
@@ -67,6 +69,18 @@ public partial class SettingsWindow
     }
 
     private void ModelCancel_Click(object sender, RoutedEventArgs e) => _modelCancel?.Cancel();
+
+    private void OnClosingDuringInstall(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (_modelCancel == null) return;
+        if (MessageBox.Show(this, "モデルを入れている途中です。中止して閉じますか？\n(続きは、あとで「続きを入れる」から入れられます)", "モデルを入れる",
+                MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+        {
+            e.Cancel = true;
+            return;
+        }
+        _modelCancel.Cancel();
+    }
 
     private void ModelRemove_Click(object sender, RoutedEventArgs e)
     {

@@ -41,8 +41,9 @@ public static class QuickOcr
                 ? new PluginNotification($"{lines} 行をコピーしました", text.Length > 80 ? text[..80] + "…" : text, PluginNotificationKind.Success)
                 : new PluginNotification("コピーできませんでした", "ほかのアプリがクリップボードを使っています。", PluginNotificationKind.Warning));
         }
-        catch (Exception ex) when (ex is InvalidOperationException or System.IO.IOException or System.Runtime.InteropServices.COMException or ArgumentException)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // (時間切れ・補助プロセスの終了なども、黙って失敗させずに知らせる。async void なので、ここで受けないと GetText が落ちる)
             App.Log("QuickOcr", ex);
             PluginToast.Show("Quick OCR", new PluginNotification("読み取れませんでした", ex.Message, PluginNotificationKind.Error));
         }

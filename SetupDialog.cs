@@ -6,7 +6,7 @@ using System.Windows.Controls;
 namespace GetText;
 
 /// <summary>
-/// AI の機能のセットアップ (設定 → セットアップ・情報 → セットアップを実行)。入れる機能 (フル・標準・最小) を、この PC に合う
+/// AI の機能のセットアップ (設定 → モデルとセットアップ → セットアップを実行)。入れる機能 (フル・標準・最小) を、この PC に合う
 /// おすすめ付きで選んでもらい、setup.bat (Python が無ければ入れるところから行う) を起動する。
 /// </summary>
 internal static class SetupDialog

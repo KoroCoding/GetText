@@ -9,6 +9,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using GetText.Plugins;
 
 namespace GetText;
 
@@ -90,7 +91,16 @@ public partial class TextWindow : Window, IMinutesHost
     private bool _accumulating;
     private bool _lastFromAi;
     private OcrDocument? _doc;
-    private List<List<(string Text, ScriptKind Kind)>> _units = [];
+    /// <summary>翻訳の単位 (範囲つき) と種類。段落ごと。</summary>
+    private List<List<(TranslationUnit Unit, ScriptKind Kind)>> _units = [];
+    /// <summary>直前に読み取った範囲の左上 (画面のピクセル) と、画像のピクセル → 画面のピクセルの倍率 (訳を重ねる位置の基準)。</summary>
+    private (double X, double Y, double ToScreen)? _readOrigin;
+    /// <summary>枠を動かした・大きさを変えた回数 (読み取りの途中で動かしたら、その回の位置は使わない)。</summary>
+    private int _frameMoves;
+    private const string OverlayOwner = "reading.translation";
+    /// <summary>読み取った位置が今の画面と合わない (枠を動かした後、まだ読み直していない)。枠の上の印を出さない。</summary>
+    private bool _positionsStale;
+    private const string HoldNote = "選択中のため更新を保留中";
 
     private bool _translating;
     private DateTime _nextTranslateAt = DateTime.MinValue;
@@ -100,8 +110,11 @@ public partial class TextWindow : Window, IMinutesHost
     public AiOcr AiOcr => _aiOcr;
     public Translator Translator => _translator;
 
+    /// <summary>画面に文字を重ねる部品 (訳を画面に重ねる・拡張機能)。読み取りの画面を隠すと消える。</summary>
+    public MacOverlayService Overlay { get; }
+
     /// <summary>利用者が選んだ読み取りの方式 (拡張機能・Quick OCR が方式を指定しないときに使う)。</summary>
-    public string PreferredOcrProvider => UseAiOcr ? "ai" : "vision";
+    public string PreferredOcrProvider => UseAiOcr && _aiOcrError == null ? "ai" : "vision";
 
     /// <summary>設定 (開発者向けの API の入・切など、窓の外から読む)。</summary>
     public AppSettings Settings => _settings;
@@ -119,7 +132,11 @@ public partial class TextWindow : Window, IMinutesHost
         _settings = settings;
         _ocrPane = new Pane(ResultBox, OcrPlaceholder);
         _translationPane = new Pane(TranslationBox, TranslationPlaceholder);
+        // 読み取りの画面を隠している・しまっている間は、画面に何も重ねない (遅れて届いた分も)
+        Overlay = new MacOverlayService(() => IsOcrVisible && WindowState != WindowState.Minimized);
         _ocrPane.Applied += RefreshSearch;
+        _ocrPane.Applied += () => { if (OcrNote.Text == HoldNote) OcrNote.Text = ""; };
+        _translationPane.Applied += () => { if (TranslationNote.Text == HoldNote) TranslationNote.Text = ""; };
         SearchBox.TextChanged += (_, _) => SearchBox_TextChanged();
         SearchBox.AddHandler(KeyDownEvent, SearchBox_KeyDown, RoutingStrategies.Tunnel);
         ResultBox.SizeChanged += (_, _) => DrawTextHighlights();
@@ -156,16 +173,25 @@ public partial class TextWindow : Window, IMinutesHost
 
         _capture.PauseRequested += (_, _) => SetPaused(!_paused);
         _capture.CloseRequested += (_, _) => Close();
-        _capture.PositionChanged += (_, _) => { if (_settings.Follow) FollowCapture(); };
+        _capture.PositionChanged += (_, _) =>
+        {
+            if (_settings.Follow) FollowCapture();
+            ForgetReadPositions();
+        };
         _capture.SizeChanged += (_, _) =>
         {
             if (_settings.Follow) FollowCapture();
             _forceNext = true; // 大きさが変わったら次回は必ず読み直す
+            ForgetReadPositions();
         };
         PropertyChanged += (_, e) =>
         {
             if (e.Property == WindowStateProperty)
+            {
                 _capture.IsVisible = WindowState != WindowState.Minimized && !_ocrHidden;
+                if (WindowState == WindowState.Minimized) Overlay.ClearAll(); // (拡張機能が重ねた文字も消す)
+                else UpdateOverlay();
+            }
         };
         Closing += OnClosing;
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
@@ -287,6 +313,7 @@ public partial class TextWindow : Window, IMinutesHost
                 _minutesWindow?.ApplyDisplaySetting(name);
                 break;
         }
+        UpdateOverlay(); // (翻訳・重ねる・文字変換を変えたとき)
         UpdateChips();
         _settings.Save();
     }
@@ -369,7 +396,8 @@ public partial class TextWindow : Window, IMinutesHost
             ? $"AI OCR (RapidOCR + PP-OCRv6)\n{(_aiOcr.Device switch { "gpu" => "GPU", "cpu" => "CPU", _ => "準備中" })}\n確からしさ {_aiOcr.LastConfidence:P0}"
             : UseAiOcr ? "Mac の文字認識 (Vision。AI OCR を準備中・使えないため)" : "Mac の文字認識 (Vision)");
         bool local = _translator.Engine == TranslationEngine.Local;
-        TranslationChip.Text = local ? "翻訳: Mac 内" : $"翻訳: {(_translator.Engine == TranslationEngine.DeepL ? "DeepL" : "Google")} (オンライン)";
+        TranslationChip.Text = (local ? "翻訳: Mac 内" : $"翻訳: {(_translator.Engine == TranslationEngine.DeepL ? "DeepL" : "Google")} (オンライン)")
+                               + (OverlayOn ? " ・ 画面に重ねる" : "");
         TranslationPlaceIcon.Icon = local ? AppIcon.Local : AppIcon.Cloud;
         ToolTip.SetTip(TranslationChipBorder, local
             ? $"{_translator.EngineName}\n文字は Mac の外に送りません"
@@ -386,6 +414,7 @@ public partial class TextWindow : Window, IMinutesHost
     {
         _aiOcrError = null;
         _aiOcrReady = false;
+        _aiWarmup = null; // (前の準備が終わったままだと、準備をし直さずに読み取りが待たされる)
         _aiOcrFailures = 0;
         if (!UseAiOcr) _aiOcr.Release(); // (AI に戻したら起動し直す)
         if (UseAiOcr && !App.DemoMode)
@@ -398,6 +427,7 @@ public partial class TextWindow : Window, IMinutesHost
 
     private async Task RunOcrAsync(bool force)
     {
+        if (_busy && force) _forceNext = true; // (読み取りの途中に押された: 終わったらすぐ読み直す)
         if (_busy || _ocrHidden || !MacHelper.IsAvailable) return;
         if (_paused && !force) return;
         if (WindowState == WindowState.Minimized && !force) return;
@@ -408,6 +438,8 @@ public partial class TextWindow : Window, IMinutesHost
         _busy = true;
         force |= _forceNext;
         _forceNext = false;
+        int moves = _frameMoves;
+        var origin = CaptureOrigin();
         try
         {
             var sw = Stopwatch.StartNew();
@@ -442,10 +474,11 @@ public partial class TextWindow : Window, IMinutesHost
             ShowLoading(UseAiOcr && _aiOcrError == null && !_aiOcrReady);
             if (useAi)
             {
+                // 画面の取り込みは補助プログラムの仕事: 失敗しても (許可が無い・応答しない) AI OCR の失敗にしない (外で知らせ、AI OCR は止めない)
+                var shot = await MacHelper.Instance.RequestAsync("capture", args, TimeSpan.FromSeconds(10));
                 try
                 {
                     // AI OCR: 画像を受け取って Python の RapidOCR で読む (変化は C# 側で判断する)
-                    var shot = await MacHelper.Instance.RequestAsync("capture", args, TimeSpan.FromSeconds(10));
                     var pixels = Convert.FromBase64String(shot["data"]!.GetValue<string>());
                     int w = shot["w"]!.GetValue<int>(), h = shot["h"]!.GetValue<int>();
                     if (!force && _lastPixels != null && !Changed(_lastPixels, pixels))
@@ -457,6 +490,7 @@ public partial class TextWindow : Window, IMinutesHost
                             var swa = Stopwatch.StartNew();
                             _lastLines = await _aiOcr.RecognizeAsync(pixels, w, h, CancellationToken.None, accurate: true);
                             _lastFromAi = true;
+                            CommitReadOrigin(origin, scale, moves);
                             UpdateDocument(fromNewFrame: true);
                             SetStatus($"高精度で読み直しました {swa.Elapsed.TotalSeconds:0.0} 秒 ・ {_lastLines.Count} 行{AccumulateStatus}");
                         }
@@ -478,6 +512,7 @@ public partial class TextWindow : Window, IMinutesHost
                     _accuratePending = _aiOcr.LastConfidence < 0.9 && _lastLines.Count > 0;
                     await FindLayoutAsync(pixels, w, h);
                     _lastOcrMs = sw.ElapsedMilliseconds;
+                    CommitReadOrigin(origin, scale, moves);
                     UpdateDocument(fromNewFrame: true);
                     UpdateChips();
                     SetStatus($"{_lastLines.Count} 行{GroupStatus}{AccumulateStatus}");
@@ -515,6 +550,7 @@ public partial class TextWindow : Window, IMinutesHost
             }
             else _lastSegments = [];
             _lastOcrMs = sw.ElapsedMilliseconds;
+            CommitReadOrigin(origin, scale, moves);
             UpdateDocument(fromNewFrame: true);
             UpdateChips();
             SetStatus($"{_lastLines.Count} 行{GroupStatus}{AccumulateStatus}");
@@ -594,11 +630,13 @@ public partial class TextWindow : Window, IMinutesHost
     /// <summary>読み取った 1 回分を、受け取る拡張機能に渡す (別のスレッドで。読み取りは待たない)。画像は渡さない。</summary>
     private async void PublishToPlugins(OcrDocument frame)
     {
+        // 読み取ったときの範囲 (読み取りの途中で枠を動かしていたら渡さない: 位置が合わないため)
+        if (_readOrigin is not { } read) return;
         double s = _capture.DesktopScaling > 0 ? _capture.DesktopScaling : 1;
         var size = _capture.CaptureSize;
-        var origin = _capture.Position;
-        var region = ((int)(origin.X + CaptureWindow.Inset[0] * s), (int)(origin.Y + CaptureWindow.Inset[1] * s), (int)(size.Width * s), (int)(size.Height * s));
-        double toScreen = _lastPixelScale > 0 ? s / _lastPixelScale : 1;
+        var origin = new Point(read.X - CaptureWindow.Inset[0] * s, read.Y - CaptureWindow.Inset[1] * s);
+        var region = ((int)read.X, (int)read.Y, (int)(size.Width * s), (int)(size.Height * s));
+        double toScreen = read.ToScreen;
         // 読み取りの範囲の下のアプリ (ポイントの座標で調べる)。分からなければ渡さない
         (string App, string Title)? source = null;
         try
@@ -617,11 +655,12 @@ public partial class TextWindow : Window, IMinutesHost
         PluginRuntime.PublishOcrFrame(PluginFrames.From(frame, region, toScreen: toScreen, source: source));
     }
 
-    private void UpdateDocument(bool fromNewFrame = false)
+    /// <param name="publish">拡張機能に渡す (蓄積を始めたときなど、同じ回をもう一度使うときは渡さない)。</param>
+    private void UpdateDocument(bool fromNewFrame = false, bool publish = true)
     {
         if (_lastLines == null) return;
         var frame = OcrDocument.From(_lastLines, _settings.JoinCjk, correct: false);
-        if (fromNewFrame && !App.DemoMode && PluginRuntime.HasOcrSubscribers) PublishToPlugins(frame);
+        if (fromNewFrame && publish && !App.DemoMode && PluginRuntime.HasOcrSubscribers) PublishToPlugins(frame);
         _grouping = OcrGrouping.None;
         if (Accumulating)
         {
@@ -640,12 +679,13 @@ public partial class TextWindow : Window, IMinutesHost
             _doc = frame;
         }
         bool hasKana = _doc.HasKana;
-        _units = _doc.ToTranslationUnits()
-            .Select(p => p.Select(u => (u, TextScript.Classify(u, hasKana))).ToList())
+        _units = _doc.TranslationUnits()
+            .Select(p => p.Select(u => (u, TextScript.Classify(u.Text, hasKana))).ToList())
             .ToList();
         RenderOcr();
         RenderTranslation();
         PumpTranslation();
+        UpdateCaptureHighlights();
     }
 
     private void RenderOcr()
@@ -664,34 +704,36 @@ public partial class TextWindow : Window, IMinutesHost
                 : "読みたい文字の上に枠を重ねるか、枠を広げてください。小さな文字は枠を大きくすると読みやすくなります。";
         }
         bool applied = _ocrPane.Set(TextConverter.Apply(_doc.ToDisplayText(), _settings.Convert));
-        if (_aiOcrReady || !UseAiOcr) OcrNote.Text = applied ? "" : "選択中のため更新を保留中";
+        if (!applied) OcrNote.Text = HoldNote;
+        else if (OcrNote.Text == HoldNote || _aiOcrReady || !UseAiOcr) OcrNote.Text = "";
     }
 
     // ───────── 翻訳 ─────────
 
     private List<string> MissingForeignUnits() =>
         _units.SelectMany(p => p)
-            .Where(u => u.Kind == ScriptKind.Foreign && !_translator.TryGetCached(u.Text, out _))
-            .Select(u => u.Text)
+            .Where(u => u.Kind == ScriptKind.Foreign && !_translator.TryGetCached(u.Unit.Text, out _))
+            .Select(u => u.Unit.Text)
             .ToList();
 
     private void RenderTranslation()
     {
+        UpdateOverlay();
         if (!_settings.Translate) return;
         int foreign = 0, missing = 0;
         var paragraphs = new List<string>();
         foreach (var paragraph in _units)
         {
             var lines = new List<string>();
-            foreach (var (text, kind) in paragraph)
+            foreach (var (unit, kind) in paragraph)
             {
                 if (kind != ScriptKind.Foreign)
                 {
-                    lines.Add(text);
+                    lines.Add(unit.Text);
                     continue;
                 }
                 foreign++;
-                if (_translator.TryGetCached(text, out var translated)) lines.Add(translated);
+                if (_translator.TryGetCached(unit.Text, out var translated)) lines.Add(translated);
                 else { lines.Add("…"); missing++; }
             }
             paragraphs.Add(string.Join("\n", lines));
@@ -705,7 +747,7 @@ public partial class TextWindow : Window, IMinutesHost
         else
         {
             var text = TextConverter.Apply(string.Join("\n\n", paragraphs), _settings.Convert);
-            if (!_translationPane.Set(text)) note = "選択中のため更新を保留中";
+            if (!_translationPane.Set(text)) note = HoldNote;
             else if (missing > 0) note = "翻訳中…";
         }
         if (_translateError != null) note = _translateError;
@@ -768,6 +810,81 @@ public partial class TextWindow : Window, IMinutesHost
         RenderTranslation();
         PumpTranslation();
     }
+
+    // ───────── 訳を画面に重ねる ─────────
+
+    /// <summary>訳を画面に重ねているか (翻訳がオンで、重ねる設定がオン)。</summary>
+    private bool OverlayOn => _settings.Translate && _settings.TranslationOverlay;
+
+    /// <summary>読み取る範囲の左上 (画面のピクセル。拡張機能に渡す範囲と同じ計算)。</summary>
+    private (double X, double Y) CaptureOrigin()
+    {
+        double s = _capture.DesktopScaling > 0 ? _capture.DesktopScaling : 1;
+        var origin = _capture.Position;
+        return (origin.X + CaptureWindow.Inset[0] * s, origin.Y + CaptureWindow.Inset[1] * s);
+    }
+
+    /// <summary>読み取った範囲を、訳を重ねる位置の基準にする (読み取りの途中で枠を動かしていたら使わない)。</summary>
+    private void CommitReadOrigin((double X, double Y) origin, double pixelScale, int moves)
+    {
+        double s = _capture.DesktopScaling > 0 ? _capture.DesktopScaling : 1;
+        _positionsStale = moves != _frameMoves;
+        _readOrigin = !_positionsStale ? (origin.X, origin.Y, pixelScale > 0 ? s / pixelScale : 1) : null;
+    }
+
+    /// <summary>
+    /// 訳した文を、その文の行が画面で占める位置に重ねる (表示 → 訳を画面に重ねる)。訳は日本語訳の欄と同じもの (訳し直さない)。
+    /// 蓄積中 (画面の位置が無い)・隠している・しまっている・枠を動かした直後は重ねない。
+    /// </summary>
+    private void UpdateOverlay()
+    {
+        if (!OverlayOn || Accumulating || _ocrHidden || WindowState == WindowState.Minimized || _readOrigin is not { } o)
+        {
+            Overlay.Clear(OverlayOwner);
+            return;
+        }
+        var labels = TranslationOverlay.Labels(_units.SelectMany(p => p),
+            text => _translator.TryGetCached(text, out var ja) ? TextConverter.Apply(ja, _settings.Convert) : null,
+            (o.X, o.Y), o.ToScreen);
+        Overlay.Show(OverlayOwner, labels);
+    }
+
+    /// <summary>枠を動かした・大きさを変えた: 読み取った位置は今の画面と合わないので、重ねた訳を消す (次に読み取ったら出し直す)。</summary>
+    private void ForgetReadPositions()
+    {
+        _frameMoves++;
+        _forceNext = true; // (動かした先がたまたま同じ画像でも、読み直して位置を決め直す)
+        if (!_positionsStale)
+        {
+            _positionsStale = true;
+            _capture.SetHighlights([], -1, _lastPixelScale); // (枠の上の検索の印も、読み直すまで消す)
+        }
+        if (_readOrigin == null) return;
+        _readOrigin = null;
+        UpdateOverlay();
+    }
+
+    /// <summary>訳を画面に重ねる / やめる。重ねるときは翻訳もオンにする。</summary>
+    public void ToggleOverlay()
+    {
+        bool on = !OverlayOn;
+        bool turnedOnTranslation = on && !_settings.Translate;
+        _settings.TranslationOverlay = on;
+        if (turnedOnTranslation)
+        {
+            _settings.Translate = true;
+            OnSettingChanged(nameof(AppSettings.Translate));
+        }
+        OnSettingChanged(nameof(AppSettings.TranslationOverlay));
+        _settingsWindow?.LoadTranslation();
+        string engine = _translator.Engine == TranslationEngine.Local ? "Mac 内の翻訳" : $"{_translator.EngineName} (オンライン。外国語の文をインターネットに送ります)";
+        SetStatus(!on ? "訳を画面に重ねるのをやめました"
+            : (turnedOnTranslation ? $"翻訳もオンにしました ({engine})。" : "")
+              + (Accumulating ? "訳を画面に重ねます (蓄積中は重ねません。蓄積を終えると重ねます)"
+                 : "訳を画面に重ねます (読み取りの枠の中の外国語の文に。クリックは下の窓に通ります)"));
+    }
+
+    private void OverlayItem_Click(object? sender, RoutedEventArgs e) => ToggleOverlay();
 
     // ───────── 操作 ─────────
 
@@ -873,16 +990,13 @@ public partial class TextWindow : Window, IMinutesHost
         ApplyOcrVisibility();
     }
 
-    /// <summary>読み取りの画面 (枠) を隠した・閉じた (画面に重ねた訳などを消す)。</summary>
-    public event Action? OcrHidden;
-
     /// <summary>読み取りの画面 (枠) が出ているか (隠れている間は、画面に文字を重ねない)。</summary>
     public bool IsOcrVisible => !_ocrClosed && !_hiddenForMinutes;
 
     private void ApplyOcrVisibility()
     {
         bool hidden = _ocrClosed || _hiddenForMinutes;
-        if (hidden) OcrHidden?.Invoke();
+        if (hidden) Overlay.ClearAll(); // (画面に重ねた訳・拡張機能の文字を消す)
         if (_ocrHidden != hidden && !_shutDown)
         {
             _ocrHidden = hidden;
@@ -896,6 +1010,7 @@ public partial class TextWindow : Window, IMinutesHost
                 _capture.Show();
                 Show();
                 _forceNext = true;
+                UpdateOverlay();
             }
         }
         FeaturesChanged?.Invoke();
@@ -916,6 +1031,9 @@ public partial class TextWindow : Window, IMinutesHost
     public void TogglePause() => SetPaused(!_paused);
 
     public void ToggleAccumulate() => SetAccumulating(!_accumulating);
+
+    /// <summary>蓄積中か (蓄積中は上から順につなげるので、枠・まとまりごとにはできない)。</summary>
+    public bool IsAccumulating => _accumulating;
 
     public void CopyOriginal() => CopyText(ResultBox, "原文");
 
@@ -949,7 +1067,30 @@ public partial class TextWindow : Window, IMinutesHost
         LayoutBelowItem.IsChecked = _settings.Layout == PaneLayout.Below;
         LayoutRightItem.IsChecked = _settings.Layout == PaneLayout.Right;
         LayoutBelowItem.IsEnabled = LayoutRightItem.IsEnabled = _settings.Translate;
+        OverlayItem.IsChecked = OverlayOn;
         AccumulateItem.IsChecked = _accumulating;
+        if (sender is MenuFlyout menu) AddReadingFeatures(menu);
+    }
+
+    /// <summary>
+    /// 読み取りの画面で使う拡張機能 (キーワードの見張り・読み取りの履歴など) を、表示メニューの終わりに切り替えとして出す
+    /// (開くたびに作り直す。押すと始める / 止める)。
+    /// </summary>
+    private static void AddReadingFeatures(MenuFlyout menu)
+    {
+        foreach (var old in menu.Items.OfType<Control>().Where(i => Equals(i.Tag, "reading-feature")).ToList()) menu.Items.Remove(old);
+        var features = AppCommands.Features.Where(f => f.InReadingWindow).ToList();
+        if (features.Count == 0) return;
+        menu.Items.Add(new Separator { Tag = "reading-feature" });
+        foreach (var feature in features)
+        {
+            bool on = feature.Status().State != FeatureState.Closed;
+            var item = new MenuItem { Header = feature.Name, ToggleType = MenuItemToggleType.CheckBox, IsChecked = on, Tag = "reading-feature" };
+            ToolTip.SetTip(item, feature.Description);
+            var f = feature;
+            item.Click += (_, _) => { if (on) f.Close?.Invoke(); else f.Open(); };
+            menu.Items.Add(item);
+        }
     }
 
     private void ViewText_Click(object? sender, RoutedEventArgs e) => SetView(OcrView.Text);
@@ -978,7 +1119,8 @@ public partial class TextWindow : Window, IMinutesHost
         _accumulating = on;
         _accumulator.Clear();
         AccumulateBar.IsVisible = on;
-        UpdateDocument(fromNewFrame: on);
+        if (!on && _settings.OcrView == OcrView.Groups) _forceNext = true; // (蓄積中は枠線を探していないので、すぐ読み直す)
+        UpdateDocument(fromNewFrame: on, publish: false); // (拡張機能にはもう渡してある)
         UpdateAccumulateBar();
         SetStatus(on ? "蓄積中: スクロールすると読んだ内容を重複なしで追記します" + AccumulateStatus : "蓄積を終了しました");
     }
@@ -1123,7 +1265,7 @@ public partial class TextWindow : Window, IMinutesHost
     /// <summary>読み取り枠の上にも、見つかった所の印を付ける。</summary>
     private void UpdateCaptureHighlights()
     {
-        if (_doc == null || _matches.Count == 0 || !SearchBar.IsVisible || Accumulating)
+        if (_doc == null || _matches.Count == 0 || !SearchBar.IsVisible || Accumulating || _positionsStale)
         {
             _capture.SetHighlights([], -1, _lastPixelScale);
             return;
@@ -1245,6 +1387,11 @@ public partial class TextWindow : Window, IMinutesHost
 
     private async void CopyText(TextBox box, string name, bool all = false)
     {
+        if (box == TranslationBox && !_settings.Translate)
+        {
+            SetStatus("日本語訳はオフです (表示 または 設定 → 翻訳 でオンにできます)");
+            return;
+        }
         bool selection = !all && box.SelectionStart != box.SelectionEnd;
         var text = selection ? box.SelectedText : box.Text;
         if (string.IsNullOrEmpty(text))
@@ -1422,13 +1569,25 @@ public partial class TextWindow : Window, IMinutesHost
         {
             switch (id)
             {
-                case 1: CopyText(ResultBox, "原文"); break;
-                case 2: CopyText(TranslationBox, "日本語訳"); break;
-                case 3: _ = RunOcrAsync(force: true); break;
-                case 4: SetPaused(!_paused); break;
+                case 1: if (OcrOpenFor("原文をコピー")) CopyText(ResultBox, "原文"); break;
+                case 2: if (OcrOpenFor("日本語訳をコピー")) CopyText(TranslationBox, "日本語訳"); break;
+                case 3:
+                    if (_ocrHidden) OpenOcr(); // (閉じていれば開いて読む)
+                    _ = RunOcrAsync(force: true);
+                    break;
+                case 4: if (OcrOpenFor("一時停止を切り替え")) SetPaused(!_paused); break;
                 case 5: MacQuickOcr.Run(); break;
             }
         });
+    }
+
+    /// <summary>どのアプリでも効くキー: 読み取りを閉じている間は、見えないまま動かさずに知らせる (開くボタンつき)。</summary>
+    private bool OcrOpenFor(string what)
+    {
+        if (!_ocrHidden) return true;
+        PluginToast.Show("GetText", new PluginNotification(new LocalizedText($"文字の読み取りを開いていないため、{what}できません"),
+            new LocalizedText("ホームの「文字の読み取り」で開くと使えます。"), PluginNotificationKind.Info, new LocalizedText("開く"), OpenOcr));
+        return false;
     }
 
     // ───────── 位置 ─────────
@@ -1476,11 +1635,11 @@ public partial class TextWindow : Window, IMinutesHost
             Close();
             return;
         }
-        // 記録を止めて残りの音声を文字にしている途中なら、終わってから閉じる (最後の発言を失わない)
-        if (!_shutDown && _minutesWindow is { HasPendingWork: true } stopping)
+        // 記録中・記録を止めて残りの音声を文字にしている途中なら、止めて終わってから閉じる (最後の発言を失わない)
+        if (!_shutDown && _minutesWindow is { } stopping && (stopping.HasPendingWork || stopping.IsRecordingNow))
         {
             e.Cancel = true;
-            await stopping.WaitPendingAsync();
+            await stopping.StopForExitAsync();
             Close();
             return;
         }
@@ -1493,6 +1652,7 @@ public partial class TextWindow : Window, IMinutesHost
         _shutDown = true;
         _timer.Stop();
         _translateCts.Cancel();
+        Overlay.ClearAll();
         MacHelper.Instance.EventReceived -= OnHelperEvent;
         _minutesWindow?.ShutdownNow();
         _translator.Shutdown();

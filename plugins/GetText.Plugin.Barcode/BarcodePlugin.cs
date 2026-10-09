@@ -53,9 +53,9 @@ public sealed class BarcodePlugin : IGetTextPlugin
             var first = hits[0];
             var title = hits.Count == 1 ? $"{first.FormatLabel}を読みました" : $"コードを {hits.Count} 個読みました";
             var message = (copied ? "コピーしました: " : "") + (text.Length > 120 ? text[..120] + "…" : text);
-            // URL は自動で開かない。押したときだけ、http・https のものを開く
+            // URL は自動で開かない。押したときだけ、http・https のものを開く (ボタンのドメインは xn-- の形: 似た文字の偽のサイトと見分けられるように)
             context.Notify(first.Url is { } url
-                ? new PluginNotification(title, message, PluginNotificationKind.Success, ActionLabel: $"{url.Host} を開く", Action: () => ui.OpenUrl(url))
+                ? new PluginNotification(title, message, PluginNotificationKind.Success, ActionLabel: $"{url.IdnHost} を開く", Action: () => ui.OpenUrl(url))
                 : new PluginNotification(title, message, PluginNotificationKind.Success));
             context.Log.Info($"コードを読みました ({hits.Count} 個)"); // (中身は書かない)
         }

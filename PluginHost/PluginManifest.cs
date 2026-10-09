@@ -247,8 +247,15 @@ public static class PluginCompatibility
         SemVersion.From(typeof(PluginCompatibility).Assembly.GetName().Version ?? new Version(1, 0, 0));
 
     /// <summary>使えなければ、その理由 (利用者に見せる文)。使えれば null。</summary>
+    /// <summary>GetText に組み込んだので、もう読み込まない・入れない拡張機能 (前の版で入れた人には理由を出す)。</summary>
+    public static readonly IReadOnlyDictionary<string, string> Retired = new Dictionary<string, string>
+    {
+        ["gettext.translation-overlay"] = "「訳を重ねる」は GetText に組み込まれました (読み取りの画面の 表示 → 訳を画面に重ねる)。この拡張機能は消してかまいません",
+    };
+
     public static string? Check(PluginManifest m, SemVersion host, string platform, int apiVersion = PluginApi.Version)
     {
+        if (Retired.TryGetValue(m.Id, out var retired)) return retired;
         if (m.ApiVersion != apiVersion)
             return m.ApiVersion > apiVersion
                 ? $"この拡張機能は新しい Plugin API (v{m.ApiVersion}) 用です。GetText を新しくしてください"

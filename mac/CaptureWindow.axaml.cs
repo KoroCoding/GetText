@@ -68,6 +68,13 @@ public partial class CaptureWindow : Window
             if (OperatingSystem.IsMacOS()) _hover.Start();
         };
         Closed += (_, _) => _hover.Stop();
+        // 隠している間はマウスを見ない (電池を使わない)
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property != IsVisibleProperty || !OperatingSystem.IsMacOS()) return;
+            if (IsVisible) _hover.Start();
+            else _hover.Stop();
+        };
         PositionChanged += (_, _) => _ = RefreshBoundsAsync();
         SizeChanged += (_, _) =>
         {

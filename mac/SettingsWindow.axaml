@@ -411,6 +411,16 @@
                         </Border>
                         <Border Classes="row">
                             <DockPanel>
+                                <ToggleSwitch x:Name="OverlayCheck" DockPanel.Dock="Right" Classes="rowCheck" OnContent="" OffContent="" Click="OverlayCheck_Click"
+                                              AutomationProperties.Name="訳を画面に重ねる"/>
+                                <StackPanel>
+                                    <TextBlock Classes="label" Text="訳を画面に重ねる"/>
+                                    <TextBlock Classes="desc" Text="読み取りの枠の中の外国語の文に、日本語の訳をその位置で重ねます (訳は日本語訳の欄と同じもの。クリックは下の窓に通ります)。読み取りの画面の 表示 からも切り替えられます。"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Classes="row">
+                            <DockPanel>
                                 <ComboBox x:Name="EngineBox" DockPanel.Dock="Right" Classes="rowCombo" MinWidth="250" SelectionChanged="EngineBox_SelectionChanged"
                                           AutomationProperties.Name="翻訳エンジン"/>
                                 <StackPanel>

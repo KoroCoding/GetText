@@ -273,10 +273,17 @@ public partial class MinutesWindow : Window
         && (MarkedOnlyToggle?.IsChecked != true || en.IsMarked)
         && MatchesSearch(en);
 
+    private DateTime _lastAutoSave = DateTime.Now;
+
+    /// <summary>
+    /// 少し待ってから自動保存する (続けて届く発言はまとめて 1 回に)。ただし前の保存から 15 秒たっていればすぐ保存する
+    /// (発言や訳が短い間隔で届き続ける間も保存されるように。途中で落ちても失うのは最大 15 秒分)。
+    /// </summary>
     private void RestartAutoSave()
     {
         _autoSave.Stop();
-        _autoSave.Start();
+        if (DateTime.Now - _lastAutoSave > TimeSpan.FromSeconds(15)) AutoSave();
+        else _autoSave.Start();
     }
 
     // ───────── 準備中の表示 ─────────
@@ -728,6 +735,30 @@ public partial class MinutesWindow : Window
 
     /// <summary>終了の前に待つ仕事 (止めている途中・プロジェクトの保存の途中) がある。</summary>
     public bool HasPendingWork => IsStopping || _savingProject || !_videoStopping.IsCompleted;
+
+    /// <summary>記録中か (GetText を終える前に止めて、残りの音声を文字にする)。</summary>
+    public bool IsRecordingNow => _service.IsRecording;
+
+    /// <summary>
+    /// GetText を終える前に: 記録中なら止めて残りの音声を文字にし、待つ仕事が終わるまで待つ
+    /// (議事録の窓を閉じたときと同じ。最後の発言を失わない)。
+    /// </summary>
+    public async Task StopForExitAsync()
+    {
+        _closingWindow = true;
+        if (_service.IsRecording)
+        {
+            try
+            {
+                await StopAsync();
+            }
+            catch (Exception ex)
+            {
+                App.Log("MinutesExitStop", ex);
+            }
+        }
+        await WaitPendingAsync();
+    }
 
     /// <summary>終了の前に待つ仕事が終わるまで待つ。</summary>
     public async Task WaitPendingAsync()
@@ -1789,6 +1820,7 @@ public partial class MinutesWindow : Window
 
     private void AutoSave()
     {
+        _lastAutoSave = DateTime.Now;
         if (App.DemoMode) return;
         if (_doc.Entries.Count == 0) return;
         try

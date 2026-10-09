@@ -55,6 +55,8 @@ public sealed class KeywordMonitorPlugin : IGetTextPlugin
         context.AddFeature(new PluginFeature
         {
             Id = "monitor",
+            // 読み取りの画面が読んだ文字を使うので、読み取りの画面の「表示」メニューで切り替える (ホームのタイルにはしない)
+            Placement = PluginFeaturePlacement.ReadingWindow,
             Name = new LocalizedText(new Dictionary<string, string> { ["ja"] = "キーワードの見張り", ["en"] = "Keyword Monitor" }),
             Description = "読み取った文字に決めた言葉が出たら知らせます",
             Icon = "Search",

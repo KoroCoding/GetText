@@ -54,6 +54,8 @@
                             <Separator/>
                             <MenuItem x:Name="LayoutBelowItem" Header="日本語訳を原文の下に" ToggleType="Radio" Click="LayoutBelow_Click"/>
                             <MenuItem x:Name="LayoutRightItem" Header="日本語訳を原文の右に" ToggleType="Radio" Click="LayoutRight_Click"/>
+                            <MenuItem x:Name="OverlayItem" Header="訳を画面に重ねる" ToggleType="CheckBox" Click="OverlayItem_Click"
+                                      ToolTip.Tip="読み取りの枠の中の外国語の文に、日本語の訳をその位置で重ねます (訳は日本語訳の欄と同じ。クリックは下の窓に通ります)"/>
                             <Separator/>
                             <MenuItem x:Name="AccumulateItem" Header="蓄積 (スクロールしながら集める)" ToggleType="CheckBox" Click="AccumulateItem_Click"/>
                         </MenuFlyout>

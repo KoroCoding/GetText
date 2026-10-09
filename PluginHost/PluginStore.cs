@@ -197,17 +197,27 @@ public sealed class PluginStore
                     TryDelete(VersionDirectory(id, prev));
                     r.PreviousVersion = null;
                 }
-                else if (Directory.Exists(VersionDirectory(id, prev)))
+                else if (IsOlder(prev, r.Version) && Directory.Exists(VersionDirectory(id, prev)))
                 {
                     // 新しい版を読み込めなかった: 前の版は消さずに、次の起動で戻す (読みかけのファイルは今は消せないことがある)
                     r.PendingVersion = prev;
                     r.PreviousVersion = null;
                     r.LastError = (r.LastError is { Length: > 0 } e ? e + " ・ " : "") + "次の起動で前の版に戻します";
                 }
+                else
+                {
+                    // 戻した前の版も読めなかった: もう行き来しない (入れ直すか、消すかを選んでもらう)
+                    r.PreviousVersion = null;
+                    TryDelete(VersionDirectory(id, prev));
+                    r.LastError = (r.LastError is { Length: > 0 } e ? e + " ・ " : "") + "前の版でも読み込めませんでした。入れ直すか、消してください";
+                }
             }
         }
         SaveQuietly();
     }
+
+    private static bool IsOlder(string a, string b) =>
+        SemVersion.TryParse(a, out var va) && SemVersion.TryParse(b, out var vb) && va < vb;
 
     /// <summary>読み込みの印・問題の記録を保存する。保存できなくても (ウイルス対策ソフトが使用中など) 読み込みは続ける。</summary>
     private void SaveQuietly()

@@ -173,7 +173,12 @@ public partial class App : Application
     internal static void Restart()
     {
         if (Home == null || Environment.ProcessPath is not { } exe) return;
-        Home.ExitThen(() => Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false })?.Dispose());
+        Home.ExitThen(() =>
+        {
+            var psi = new ProcessStartInfo(exe) { UseShellExecute = false };
+            psi.Environment.Remove("GETTEXT_SAFE_MODE"); // (環境変数で Safe Mode にしていても、普通に起動し直す)
+            Process.Start(psi)?.Dispose();
+        }, "再起動");
     }
 
     private static void ActivateExisting()

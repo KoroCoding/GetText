@@ -335,6 +335,8 @@ public class PluginRuntimeTests : IDisposable
         Assert.True(Plugin("gettext.keyword-monitor").Loaded, Plugin("gettext.keyword-monitor").Error);
         var feature = Assert.Single(AppCommands.Features, f => f.Id == "plugin:gettext.keyword-monitor:monitor");
         Assert.Equal(FeatureState.Active, feature.Status().State);
+        // 読み取りの画面が読んだ文字を使うので、ホームのタイルではなく読み取りの画面の「表示」メニューに出す
+        Assert.True(feature.InReadingWindow);
         Assert.True(PluginRuntime.HasOcrSubscribers);
 
         PluginRuntime.PublishOcrFrame(Frame("至急 ご確認ください"));
@@ -378,61 +380,13 @@ public class PluginRuntimeTests : IDisposable
         Assert.DoesNotContain("予算", File.Exists(PluginLog.Path) ? File.ReadAllText(PluginLog.Path) : "");
         var data = Plugin("gettext.history").Context!.DataDirectory;
         Assert.Single(Directory.GetFiles(Path.Combine(data, "history"), "*.jsonl"));
-    }
+        Assert.True(Assert.Single(AppCommands.Features, f => f.Id == "plugin:gettext.history:history").InReadingWindow);
 
-    private sealed class FakeTranslation : ITranslationService
-    {
-        public bool IsAvailable => true;
-
-        public Task<IReadOnlyList<string>> TranslateToJapaneseAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<string>>(texts.Select(t => "訳:" + t).ToList());
-    }
-
-    private sealed class FakeOverlay : IOverlayService
-    {
-        public readonly List<(string Owner, IReadOnlyList<OverlayLabel> Labels)> Shown = [];
-        public readonly List<string> Cleared = [];
-
-        public void Show(string owner, IReadOnlyList<OverlayLabel> labels)
-        {
-            lock (Shown) Shown.Add((owner, labels));
-        }
-
-        public void Clear(string owner)
-        {
-            lock (Cleared) Cleared.Add(owner);
-        }
-    }
-
-    [Fact]
-    public void TranslationOverlayShowsTranslatedForeignLinesAtTheirPositions()
-    {
-        var overlay = new FakeOverlay();
-        PluginRuntime.RegisterService<ITranslationService>(new FakeTranslation());
-        PluginRuntime.RegisterService<IOverlayService>(overlay);
-        var store = new PluginStore(_root);
-        store.InstallFromFile(Package(@"plugins\GetText.Plugin.TranslationOverlay", "GetText.Plugin.TranslationOverlay.dll"), null, PluginTrust.Community, PluginSource.LocalFile);
-        Start();
-        Assert.True(Plugin("gettext.translation-overlay").Loaded, Plugin("gettext.translation-overlay").Error);
-        Assert.False(PluginRuntime.HasOcrSubscribers); // (既定は重ねない)
-
-        Assert.True(AppCommands.Registry.TryRun("plugin:gettext.translation-overlay:toggle"));
-        Assert.True(WaitFor(() => PluginRuntime.HasOcrSubscribers));
-        PluginRuntime.PublishOcrFrame(new OcrFrameEventArgs
-        {
-            Time = DateTimeOffset.Now,
-            Lines = [new OcrTextLine("Hello world", 10, 20, 110, 40), new OcrTextLine("こんにちは", 10, 50, 110, 70)],
-            Text = "Hello world\nこんにちは",
-            Region = (0, 0, 200, 100),
-        });
-        Assert.True(WaitFor(() => { lock (overlay.Shown) return overlay.Shown.Count > 0; }));
-        var label = Assert.Single(overlay.Shown[0].Labels);
-        Assert.Equal(("訳:Hello world", 10.0, 20.0, 110.0, 40.0), (label.Text, label.Left, label.Top, label.Right, label.Bottom));
-
-        // やめると消す
-        Assert.True(AppCommands.Registry.TryRun("plugin:gettext.translation-overlay:toggle"));
-        Assert.True(WaitFor(() => { lock (overlay.Cleared) return overlay.Cleared.Contains("translation-overlay"); }));
-        Assert.False(PluginRuntime.HasOcrSubscribers);
+        // 続けて変わった後に止まった画面 (前の保存から間もない最後の回) も、間隔があいたら保存する
+        PluginRuntime.PublishOcrFrame(Frame("変わった直後の画面"));
+        Thread.Sleep(300); // (前の回を処理している間に届いた回は、GetText が飛ばす決まり)
+        PluginRuntime.PublishOcrFrame(Frame("止まった最後の画面の文字"));
+        Assert.True(WaitFor(() => PluginSearch.SearchAsync("止まった最後", 10, CancellationToken.None).GetAwaiter().GetResult().Count == 1, ms: 8000));
     }
 
     [Fact]

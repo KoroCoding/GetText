@@ -34,6 +34,8 @@ public static class OcrLayout
 
     public static OcrGrouping Group(IReadOnlyList<OcrLineData> lines, IReadOnlyList<LayoutSegment> segments)
     {
+        // OCR は同じ高さに並んだ隣の枠の文字を 1 行にまとめることがある (D-4 と E-4 など)。枠線・大きな空きで分け直す
+        lines = SplitAcross(lines, segments);
         if (lines.Count < 2) return OcrGrouping.None;
 
         // 1. 枠に入れる
@@ -58,7 +60,7 @@ public static class OcrLayout
             foreach (var (key, list) in framed)
             {
                 var b = boxes[key];
-                groups.Add(new OcrGroup(list, b.L, b.T, b.R, b.B, Framed: true));
+                groups.Add(new OcrGroup(TopToBottom(list), b.L, b.T, b.R, b.B, Framed: true));
             }
             // 枠の外の行は、離れ具合でまとまりにする
             groups.AddRange(Clusters(loose));
@@ -89,6 +91,74 @@ public static class OcrLayout
             doc.Paragraphs.AddRange(part.Paragraphs);
         }
         return doc;
+    }
+
+    /// <summary>
+    /// 縦の枠線をまたぐ行を、文字 (単語) の位置で分ける。枠線が無くても、行の中が行の高さの 3 倍より大きく空いていれば
+    /// 別の列として分ける。文字の位置が無い行はそのまま (どこで分ければよいか分からないため)。
+    /// </summary>
+    internal static List<OcrLineData> SplitAcross(IReadOnlyList<OcrLineData> lines, IReadOnlyList<LayoutSegment> segments)
+    {
+        var result = new List<OcrLineData>(lines.Count);
+        foreach (var line in lines) result.AddRange(SplitLine(line, segments));
+        return result;
+    }
+
+    private static List<OcrLineData> SplitLine(OcrLineData line, IReadOnlyList<LayoutSegment> segments)
+    {
+        if (line.Spans is not { Count: >= 2 } spans) return [line];
+        double h = Math.Max(1, line.Bottom - line.Top), cy = (line.Top + line.Bottom) / 2;
+        var walls = segments.Where(s => !s.Horizontal && s.From <= cy && s.To >= cy && s.Pos > line.Left && s.Pos < line.Right)
+            .Select(s => s.Pos).ToList();
+        // 分ける所 (その前までの span の数)
+        var cuts = new List<int>();
+        for (int k = 1; k < spans.Count; k++)
+        {
+            var a = spans[k - 1];
+            var b = spans[k];
+            double ca = (a.Left + a.Right) / 2, cb = (b.Left + b.Right) / 2;
+            if (walls.Any(x => x > ca && x < cb) || b.Left - a.Right > h * 3) cuts.Add(k);
+        }
+        if (cuts.Count == 0) return [line];
+
+        // 文字 (空白を除く) の数で、元の文字列の分ける所を決める (単語の中の空白はそのまま残す)
+        var cutGlyphs = new Queue<int>(cuts.Select(k => spans.Take(k).Sum(s => s.Glyphs)));
+        var pieces = new List<List<string>> { new() };
+        int g = 0;
+        foreach (var word in line.Words)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < word.Length; i++)
+            {
+                char c = word[i];
+                if (!char.IsWhiteSpace(c))
+                {
+                    if (cutGlyphs.Count > 0 && g == cutGlyphs.Peek())
+                    {
+                        cutGlyphs.Dequeue();
+                        if (sb.ToString().Trim() is { Length: > 0 } done) pieces[^1].Add(done);
+                        sb.Clear();
+                        pieces.Add([]);
+                    }
+                    g++;
+                    if (char.IsHighSurrogate(c) && i + 1 < word.Length && char.IsLowSurrogate(word[i + 1])) sb.Append(word[i++]);
+                    c = word[i];
+                }
+                sb.Append(c);
+            }
+            if (sb.ToString().Trim() is { Length: > 0 } rest) pieces[^1].Add(rest);
+        }
+        if (g != spans.Sum(s => s.Glyphs) || pieces.Count != cuts.Count + 1 || pieces.Any(p => p.Count == 0)) return [line];
+
+        var result = new List<OcrLineData>();
+        var bounds = cuts.Prepend(0).Append(spans.Count).ToList();
+        for (int p = 0; p < pieces.Count; p++)
+        {
+            var part = spans.Skip(bounds[p]).Take(bounds[p + 1] - bounds[p]).ToArray();
+            result.Add(new OcrLineData(pieces[p], part.Min(s => s.Left), part.Min(s => s.Top), part.Max(s => s.Right), part.Max(s => s.Bottom),
+                part, line.Confidence));
+        }
+        return result;
     }
 
     // 行を囲む枠 (上下左右の線)。上下だけ (横線で区切った表の行)・左右だけ (縦線で区切った列) でもよい
@@ -148,7 +218,7 @@ public static class OcrLayout
             .GroupBy(Find)
             .Select(g =>
             {
-                var members = g.OrderBy(i => i).Select(i => lines[i]).ToList();
+                var members = TopToBottom(g.Select(i => lines[i]));
                 return new OcrGroup(members, members.Min(l => l.Left), members.Min(l => l.Top), members.Max(l => l.Right), members.Max(l => l.Bottom), Framed: false);
             })
             .ToList();
@@ -167,6 +237,24 @@ public static class OcrLayout
             if (apart && vOverlap > Math.Min(a.Height, b.Height) * 0.5) return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// まとまりの中の行を上から順に並べる (OCR は行を順不同で返すことがある: Windows OCR が枠の中を下から返すなど)。
+    /// 高さが半分以上重なる行は同じ行とみなし、左から並べる。
+    /// </summary>
+    internal static List<OcrLineData> TopToBottom(IEnumerable<OcrLineData> lines)
+    {
+        var sorted = lines.OrderBy(l => l.Top).ToList();
+        var rows = new List<List<OcrLineData>>();
+        foreach (var line in sorted)
+        {
+            var row = rows.LastOrDefault();
+            double h = Math.Max(1, line.Bottom - line.Top);
+            if (row != null && Math.Min(row[0].Bottom, line.Bottom) - Math.Max(row[0].Top, line.Top) >= Math.Min(h, row[0].Bottom - row[0].Top) * 0.5) row.Add(line);
+            else rows.Add([line]);
+        }
+        return rows.SelectMany(r => r.OrderBy(l => l.Left)).ToList();
     }
 
     /// <summary>行 (上から) → 列 (左から) の順に並べる。</summary>
@@ -218,9 +306,10 @@ public static class OcrLayout
     {
         double padX = (l.Right - l.Left) * 0.05, padY = (l.Bottom - l.Top) * 0.15;
         double mid = (s.From + s.To) / 2;
+        // 縦は、行の高さを大きく超える線は文字の中の線ではない (同じ高さの隣の枠の文字を OCR が 1 行にまとめたとき、間の枠線を消さない)
         return s.Horizontal
             ? s.Pos > l.Top + padY && s.Pos < l.Bottom - padY && mid > l.Left && mid < l.Right && s.Length <= (l.Right - l.Left) * 1.1
-            : s.Pos > l.Left + padX && s.Pos < l.Right - padX && mid > l.Top && mid < l.Bottom;
+            : s.Pos > l.Left + padX && s.Pos < l.Right - padX && mid > l.Top && mid < l.Bottom && s.Length <= (l.Bottom - l.Top) * 1.5;
     }
 
     private static double Median(IEnumerable<double> values)

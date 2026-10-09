@@ -72,6 +72,8 @@ public sealed class HistoryPlugin : IGetTextPlugin, IPluginSearchProvider
         context.AddFeature(new PluginFeature
         {
             Id = "history",
+            // 読み取りの画面が読んだ文字を使うので、読み取りの画面の「表示」メニューで切り替える (ホームのタイルにはしない)
+            Placement = PluginFeaturePlacement.ReadingWindow,
             Name = Title,
             Description = "読み取った文字をこの PC に保存して、あとで探せます (既定は保存しない)",
             Icon = "History",
@@ -115,6 +117,8 @@ public sealed class HistoryPlugin : IGetTextPlugin, IPluginSearchProvider
         {
             Apply();
             if (key == EnabledKey) Subscribe(context.Settings.GetBool(EnabledKey, false));
+            // 保存期間を短くしたら、過ぎた履歴をすぐ消す (次に起動するまで検索に出さない)
+            if (key == RetentionKey) _ = Task.Run(Prune);
         };
         Subscribe(context.Settings.GetBool(EnabledKey, false));
         Prune();
@@ -143,7 +147,11 @@ public sealed class HistoryPlugin : IGetTextPlugin, IPluginSearchProvider
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _context.Log.Error("履歴を読めませんでした", ex); }
             });
         }
-        else _context!.OcrFrameRead -= OnFrame;
+        else
+        {
+            _context!.OcrFrameRead -= OnFrame;
+            lock (_pendingLock) _pending = null;
+        }
     }
 
     private Task SetEnabled(bool on)
@@ -165,15 +173,47 @@ public sealed class HistoryPlugin : IGetTextPlugin, IPluginSearchProvider
     private void OnFrame(object? sender, OcrFrameEventArgs e)
     {
         if (!_enabled) return;
+        Save(e.Time, e.SourceApplication, e.Text);
+    }
+
+    private readonly object _pendingLock = new();
+    private (string? App, string Text)? _pending;
+    private Timer? _flushTimer;
+
+    private void Save(DateTimeOffset time, string? app, string text)
+    {
         try
         {
-            _store!.Add(e.Time, e.SourceApplication, e.Text);
-            if (DateTime.Now - _lastPrune > TimeSpan.FromHours(1)) Prune();
+            if (_store!.Add(time, app, text))
+            {
+                lock (_pendingLock) _pending = null;
+                if (DateTime.Now - _lastPrune > TimeSpan.FromHours(1)) Prune();
+                return;
+            }
+            // 続けて変わっている間 (前の保存から間もない) は、最新の 1 回分だけ取っておき、間隔があいたら保存する
+            // (読み取りの結果は画面が変わったときにしか届かないので、捨てると止まった最後の画面が残らない)
+            if (time - _store.LastSaved < _store.MinInterval)
+            {
+                lock (_pendingLock) _pending = (app, text);
+                _flushTimer ??= new Timer(_ => FlushPending());
+                _flushTimer.Change(_store.MinInterval, Timeout.InfiniteTimeSpan);
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             _context!.Log.Error("履歴を保存できませんでした", ex); // (文字は書かない)
         }
+    }
+
+    private void FlushPending()
+    {
+        (string? App, string Text)? pending;
+        lock (_pendingLock)
+        {
+            pending = _pending;
+            _pending = null;
+        }
+        if (pending is { } p && _enabled) Save(DateTimeOffset.Now, p.App, p.Text);
     }
 
     private void Prune()
@@ -196,8 +236,9 @@ public sealed class HistoryPlugin : IGetTextPlugin, IPluginSearchProvider
         int count = _store!.Count;
         var ui = context.GetService<IPluginUi>();
         if (ui == null) return;
-        var answer = await ui.ChooseAsync("読み取りの履歴を消す", $"保存した {count} 件をすべて消します。元に戻せません。", ["すべて消す"], ct);
-        if (answer != 0) return;
+        // (初めに選ばれているのは「消さない」。Enter だけでは消えない)
+        var answer = await ui.ChooseAsync("読み取りの履歴を消す", $"保存した {count} 件をすべて消します。元に戻せません。", ["消さない", "すべて消す"], ct);
+        if (answer != 1) return;
         try
         {
             _store.Clear();
@@ -217,6 +258,7 @@ public sealed class HistoryPlugin : IGetTextPlugin, IPluginSearchProvider
 
     public void Shutdown()
     {
+        _flushTimer?.Dispose();
         if (_enabled && _context != null) _context.OcrFrameRead -= OnFrame;
     }
 }

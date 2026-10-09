@@ -40,8 +40,16 @@ public sealed class AppCommand
     public IReadOnlyList<string> Keywords { get; init; } = [];
     public CommandCategory Category { get; init; } = CommandCategory.Action;
     public IconSource Icon { get; init; } = AppIcon.Command;
-    /// <summary>キーの表示 (「Ctrl+F」など。無ければ null)。</summary>
-    public string? Shortcut { get; init; }
+    /// <summary>キーの表示 (「Ctrl+F」など。無ければ null)。設定で変えられるキーは ShortcutSource で今のキーを出す。</summary>
+    public string? Shortcut
+    {
+        get => ShortcutSource?.Invoke() ?? _shortcut;
+        init => _shortcut = value;
+    }
+    private readonly string? _shortcut;
+
+    /// <summary>今のキー (設定で変えたら、コマンドの一覧の表示も変わる)。</summary>
+    public Func<string?>? ShortcutSource { get; init; }
     /// <summary>この画面を使っているときは上に出す。</summary>
     public IReadOnlyList<CommandContext> Contexts { get; init; } = [];
     /// <summary>今使えるか (使えないものは一覧に出さない)。</summary>
@@ -215,6 +223,8 @@ public sealed class FeatureInfo
     /// <summary>PC の中だけで動く (送信しない) か。</summary>
     public bool Local { get; init; } = true;
     public string? Publisher { get; init; }
+    /// <summary>読み取りの画面の「表示」メニューに切り替えとして出す (ホームのタイルには出さない)。</summary>
+    public bool InReadingWindow { get; init; }
 }
 
 public enum FeatureState

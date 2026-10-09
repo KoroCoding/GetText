@@ -25,6 +25,9 @@ public sealed class PluginToast : Window
     private readonly DispatcherTimer _timer = new();
     private Action? _onAction;
     private bool _closed;
+    /// <summary>進み具合の知らせ (終わるまで): × で閉じると中止する。古い知らせとして押し出さない。</summary>
+    private Action? _cancelOnClose;
+    private Button? _closeButton;
 
     private PluginToast()
     {
@@ -39,7 +42,7 @@ public sealed class PluginToast : Window
         SizeToContent = SizeToContent.Height;
         SetResourceReference(FontFamilyProperty, "Gt.Font.Ui");
 
-        var close = new Button
+        var close = _closeButton = new Button
         {
             Content = WindowsIcons.Glyph(AppIcon.Close),
             FontFamily = _icon.FontFamily,
@@ -54,7 +57,11 @@ public sealed class PluginToast : Window
         };
         System.Windows.Automation.AutomationProperties.SetName(close, "知らせを閉じる");
         close.SetResourceReference(ForegroundProperty, "Gt.TextSecondary");
-        close.Click += (_, _) => Close();
+        close.Click += (_, _) =>
+        {
+            _cancelOnClose?.Invoke(); // (進み具合の知らせを閉じたら、作業も止める: 見えないまま続けない)
+            Close();
+        };
         _action.Click += (_, _) =>
         {
             var action = _onAction;
@@ -94,6 +101,8 @@ public sealed class PluginToast : Window
         Content = card;
 
         _timer.Tick += (_, _) => Close();
+        // 知らせは画面の取り込み (スライドの記録・読み取り・ほかのアプリの画面共有) に写らない
+        SourceInitialized += (_, _) => NativeMethods.SetWindowDisplayAffinity(new System.Windows.Interop.WindowInteropHelper(this).Handle, NativeMethods.WDA_EXCLUDEFROMCAPTURE);
         Closed += (_, _) =>
         {
             _closed = true;
@@ -134,13 +143,16 @@ public sealed class PluginToast : Window
         toast._action.Content = "中止";
         toast._onAction = handle.Cancel;
         toast._action.Visibility = Visibility.Visible;
+        toast._cancelOnClose = handle.Cancel;
+        if (toast._closeButton != null) toast._closeButton.ToolTip = "中止して閉じる";
         toast.Display();
         return handle;
     }
 
     private static PluginToast Create()
     {
-        while (Open.Count >= MaxOpen) Open[0].Close();
+        // 古いものから閉じる。進み具合 (作業中) は閉じない (閉じると中止ボタンが無くなるため)
+        while (Open.Count >= MaxOpen && Open.FirstOrDefault(t => t._cancelOnClose == null) is { } old) old.Close();
         var toast = new PluginToast();
         Open.Add(toast);
         return toast;
@@ -217,6 +229,8 @@ public sealed class PluginToast : Window
         {
             if (_done || toast._closed) return;
             _done = true;
+            toast._cancelOnClose = null;
+            if (toast._closeButton != null) toast._closeButton.ToolTip = "閉じる";
             toast._progress.Visibility = Visibility.Collapsed;
             toast._action.Visibility = Visibility.Collapsed;
             toast.Set(toast._title.Text, message?.For("ja") ?? (failed ? "できませんでした" : "終わりました"),

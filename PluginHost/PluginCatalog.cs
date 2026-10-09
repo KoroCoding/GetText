@@ -393,7 +393,8 @@ public sealed class PluginCatalog(PluginStore store, Func<IReadOnlyList<LoadedPl
         if (l == null) return record.Enabled ? (PluginItemState.RestartRequired, "再起動すると使えます") : (PluginItemState.Disabled, null);
         if (safeMode) return (PluginItemState.SafeMode, "Safe Mode なので読み込んでいません");
         if (l.Loaded && !record.Enabled) return (PluginItemState.RestartRequired, "再起動すると止まります");
-        if (!l.Loaded && record.Enabled && l.Error == null && record.LastError == null) return (PluginItemState.RestartRequired, "再起動すると使えます");
+        // (止めていた・落ちて止めた拡張機能を有効に戻した: 起動したときの問題は古いので出さない)
+        if (!l.Loaded && record.Enabled && record.LastError == null && (l.Error == null || l.DisabledAtLoad)) return (PluginItemState.RestartRequired, "再起動すると使えます");
         if (!record.Enabled) return (PluginItemState.Disabled, record.LastError);
         if (!l.Loaded) return (PluginItemState.Error, l.Error ?? record.LastError);
         return (PluginItemState.Running, null);

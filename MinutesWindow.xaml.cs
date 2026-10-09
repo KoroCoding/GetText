@@ -351,8 +351,7 @@ public partial class MinutesWindow : Window
             if (!_dropLate && _doc.ApplySpeakerChanges(changes) > 0)
             {
                 RefreshTalkTimes();
-                _autoSave.Stop();
-                _autoSave.Start();
+                ScheduleAutoSave();
             }
         });
         _service.LlmStatus += state => Dispatcher.BeginInvoke(() => OnLlmStatus(state));
@@ -771,7 +770,7 @@ public partial class MinutesWindow : Window
         _settings.Save();
         if (langs.Any(l => l != "ja") && !TranscriptionService.IsMultilingualInstalled)
         {
-            SetStatus("日本語以外の音声認識モデルが未セットアップです。設定 → セットアップ・情報 → 「セットアップを実行」で入ります (約 1.6GB)。それまでは日本語として文字にします");
+            SetStatus("日本語以外の音声認識モデルが未セットアップです。設定 → モデルとセットアップ → 「セットアップを実行」で入ります (約 1.6GB)。それまでは日本語として文字にします");
             return;
         }
         _service.SetLanguages(langs); // 記録中でも、次の発言から切り替わる
@@ -789,7 +788,7 @@ public partial class MinutesWindow : Window
             if (state == "ready") return;
         }
         if (state == "loading") SetStatus("英語などの音声認識モデルを読み込んでいます…");
-        else if (state == "missing") SetStatus("英語などの音声認識モデルがありません。設定 → セットアップ・情報 → 「セットアップを実行」で入ります。いまは日本語として文字にしています");
+        else if (state == "missing") SetStatus("英語などの音声認識モデルがありません。設定 → モデルとセットアップ → 「セットアップを実行」で入ります。いまは日本語として文字にしています");
         else if (state == "ready" && !_service.IsRecording && !_service.IsTranscribingFile) SetStatus("英語などの音声認識モデルの準備ができました");
     }
 
@@ -980,6 +979,27 @@ public partial class MinutesWindow : Window
     /// <summary>終了の前に待つ仕事 (止めている途中・プロジェクトの保存の途中) がある。</summary>
     public bool HasPendingWork => IsStopping || _savingProject;
 
+    /// <summary>
+    /// GetText を終える前に: 記録中なら止めて残りの音声を文字にし、待つ仕事が終わるまで待つ
+    /// (議事録の窓の ✕ で閉じたときと同じ。最後の発言を失わない)。
+    /// </summary>
+    public async Task StopForExitAsync()
+    {
+        _closingWindow = true;
+        if (_service.IsRecording)
+        {
+            try
+            {
+                await StopAsync();
+            }
+            catch (Exception ex)
+            {
+                App.Log("MinutesExitStop", ex);
+            }
+        }
+        await WaitPendingAsync();
+    }
+
     /// <summary>終了の前に待つ仕事が終わるまで待つ (プロジェクトの保存は長い動画で数分かかることがある)。</summary>
     public async Task WaitPendingAsync()
     {
@@ -1156,8 +1176,7 @@ public partial class MinutesWindow : Window
         _doc.Add(segment.SessionStart ?? _service.SessionStart, segment);
         if (_voiceNames.TryGetValue(segment.Speaker, out var voiceName)) ApplyVoiceName(segment.Speaker, voiceName);
         ScrollToLatest();
-        _autoSave.Stop();
-        _autoSave.Start();
+        ScheduleAutoSave();
     }
 
     /// <summary>
@@ -1228,8 +1247,7 @@ public partial class MinutesWindow : Window
         if (_doc.Revise(revision) == null) return;
         ScrollToLatest();
         UpdateFillerCount();
-        _autoSave.Stop();
-        _autoSave.Start();
+        ScheduleAutoSave();
         if (revision.Stage == "llm") _corrections++;
         UpdateCorrectionStatus();
     }
@@ -1259,7 +1277,7 @@ public partial class MinutesWindow : Window
             "gpu" => "前後の発言から、聞き間違えた語を AI (Qwen3-4B, GPU) が直します。直した発言には印が付きます",
             "cpu" => "前後の発言から、聞き間違えた語を AI (Qwen3-4B, CPU) が直します。GPU のメモリが足りないため CPU で動いています",
             "unavailable" => "AI のモデルを読み込めませんでした",
-            "off" => "設定 → セットアップ・情報 → セットアップを実行 で入ります",
+            "off" => "設定 → モデルとセットアップ → セットアップを実行 で入ります",
             _ => CorrectCheck.ToolTip,
         };
     }
@@ -1328,7 +1346,7 @@ public partial class MinutesWindow : Window
             : _service.Speed == "light" ? "いまは軽さ優先で動いています (速い音声認識。「、」「。」は話の間 (ま) と言い回しから付けます。「？」は付きません)。"
             : _service.HasGpu ? "いまは正確さ優先で動いています (GPU)。"
             : "いまは正確さ優先で動いています。GPU が無いので、話し終わってから文字になるまで時間がかかります。";
-        string missing = _speedFastInstalled ? "" : " 軽さ優先の音声認識が未セットアップです (設定 → セットアップ・情報 → 「セットアップを実行」で入ります。約 160MB)。";
+        string missing = _speedFastInstalled ? "" : " 軽さ優先の音声認識が未セットアップです (設定 → モデルとセットアップ → 「セットアップを実行」で入ります。約 160MB)。";
         SpeedNote.Text = (now + missing).Trim();
     }
 
@@ -1435,8 +1453,7 @@ public partial class MinutesWindow : Window
                 RememberVoice(named);
             }
             _nameAtFocus = box.Text;
-            _autoSave.Stop();
-            _autoSave.Start();
+            ScheduleAutoSave();
             LeaveTextBox(box); // 入力を終える (全選択の薄いグレーのまま欄に残さない)
             e.Handled = true;
         }
@@ -1478,8 +1495,7 @@ public partial class MinutesWindow : Window
             {
                 if (_closed) return;
                 if (!MergeIfSameName(speaker, before)) RememberVoice(speaker);
-                _autoSave.Stop();
-                _autoSave.Start();
+                ScheduleAutoSave();
             }, DispatcherPriority.Background);
         }
     }
@@ -2143,14 +2159,12 @@ public partial class MinutesWindow : Window
             {
                 if (e.PropertyName == nameof(MinutesEntry.Text) && entry.UserEdited)
                 {
-                    _autoSave.Stop();
-                    _autoSave.Start();
+                    ScheduleAutoSave();
                 }
                 if (e.PropertyName == nameof(MinutesEntry.IsMarked))
                 {
                     UpdateMarkedCount();
-                    _autoSave.Stop();
-                    _autoSave.Start();
+                    ScheduleAutoSave();
                     return;
                 }
                 // 本文が変わったら (自動の補正・書き直し) 訳し直す
@@ -2169,7 +2183,7 @@ public partial class MinutesWindow : Window
         if (TranslateCheck.IsChecked != true || !entry.NeedsTranslation || entry.Translation != null) return;
         if (!Translator.OfflineAvailable)
         {
-            if (!_translateErrorShown) SetStatus("日本語訳には PC 内の翻訳モデルが必要です (設定 → セットアップ・情報 → セットアップを実行)");
+            if (!_translateErrorShown) SetStatus("日本語訳には PC 内の翻訳モデルが必要です (設定 → モデルとセットアップ → セットアップを実行)");
             _translateErrorShown = true;
             return;
         }
@@ -2196,8 +2210,7 @@ public partial class MinutesWindow : Window
                     if (batch[i].Text == texts[i] && _doc.Entries.Contains(batch[i])) batch[i].Translation = results[i];
                 }
                 ScrollToLatest(); // 訳の行が増えて最新の発言が下に隠れないように
-                _autoSave.Stop();
-                _autoSave.Start();
+                ScheduleAutoSave();
             }
         }
         catch (Exception ex)
@@ -2265,8 +2278,22 @@ public partial class MinutesWindow : Window
     // ───────── 保存 ─────────
 
     /// <summary>落ちても内容が残るよう、発言が増えるたびに Markdown で自動保存する。</summary>
+    private DateTime _lastAutoSave = DateTime.Now;
+
+    /// <summary>
+    /// 少し待ってから自動保存する (続けて届く発言はまとめて 1 回に)。ただし前の保存から 15 秒たっていればすぐ保存する
+    /// (発言や訳が 2 秒より短い間隔で届き続ける間も保存されるように。途中で落ちても失うのは最大 15 秒分)。
+    /// </summary>
+    private void ScheduleAutoSave()
+    {
+        _autoSave.Stop();
+        if (DateTime.Now - _lastAutoSave > TimeSpan.FromSeconds(15)) AutoSave();
+        else _autoSave.Start();
+    }
+
     private void AutoSave()
     {
+        _lastAutoSave = DateTime.Now;
         if (App.DemoMode) return;
         if (_doc.Entries.Count == 0) return;
         try
@@ -2644,6 +2671,9 @@ public partial class MinutesWindow : Window
     /// <summary>記録中・ファイルの文字起こし中か (アプリを閉じる前の確認に使う)。</summary>
     public bool IsBusy => _service.IsRecording || _service.IsTranscribingFile || _burning;
 
+    /// <summary>今していること (ホームのタイルの印。していなければ null)。</summary>
+    public string? BusyLabel => _service.IsRecording ? "記録中" : _service.IsTranscribingFile ? "ファイルを文字起こし中" : _burning ? "字幕つきの動画を作成中" : null;
+
     /// <summary>記録中・文字起こし中なら、止めてよいかを聞く。止めてよければ true。</summary>
     public bool ConfirmStop(string what)
     {
@@ -2982,8 +3012,7 @@ public partial class MinutesWindow : Window
     {
         if (_settingSummary) return;
         _doc.Summary = string.IsNullOrWhiteSpace(SummaryBox.Text) ? null : SummaryBox.Text;
-        _autoSave.Stop();
-        _autoSave.Start();
+        ScheduleAutoSave();
     }
 
     // ───────── 重要な発言 (★) ─────────
@@ -3562,8 +3591,7 @@ public partial class MinutesWindow : Window
         var note = _doc.AddNote(time, text);
         MemoBox.Clear();
         if (AutoScrollCheck.IsChecked == true) EntryList.ScrollIntoView(note);
-        _autoSave.Stop();
-        _autoSave.Start();
+        ScheduleAutoSave();
         SetStatus($"メモを追加しました ({note.TimeText})。本文はクリックで書き直せ、右クリックで削除できます");
     }
 

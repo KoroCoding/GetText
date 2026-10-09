@@ -79,6 +79,7 @@
     <Compile Include="..\HostOcrService.cs" Link="Shared\HostOcrService.cs" />
     <Compile Include="..\DeveloperApi.cs" Link="Shared\DeveloperApi.cs" />
     <Compile Include="..\ProtectedContent.cs" Link="Shared\ProtectedContent.cs" />
+    <Compile Include="..\TranslationOverlay.cs" Link="Shared\TranslationOverlay.cs" />
     <Compile Include="..\PluginHost\**\*.cs" Link="Shared\PluginHost\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 

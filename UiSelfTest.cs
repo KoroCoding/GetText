@@ -418,6 +418,21 @@ internal static class UiSelfTest
         settings.OcrView = OcrView.Text;
         text2.ShowDemoLines([L("A-1 山田", 12, 12), L("B-1 佐藤", 162, 12)], grid, 300, 120, null);
         Check(!((TextBox)text2.FindName("ResultBox")).Text.Contains('【'), "上から順に戻すと見出しは付かない");
+
+        // 21. 訳を画面に重ねる: 日本語訳の欄と同じ訳を、その文の行の位置に重ねる (日本語の行には重ねない)。隠すと消える
+        settings.Translate = true;
+        settings.TranslationOverlay = true;
+        text2.ShowDemoLines([L("Hello world", 10, 10), L("会議は十時からです", 10, 50)], null, 300, 120, null);
+        text2.ShowDemoOverlay([("Hello world", "こんにちは、世界の皆さん (長い訳は四角に収まるまで小さくする)")], new Int32Rect(200, 300, 300, 120));
+        await Idle(text2);
+        var overlayShown = text2.Overlay.Shown("reading.translation");
+        Check(overlayShown is [{ Left: 210, Top: 310 } only] && only.Text.StartsWith("こんにちは"),
+            $"訳を画面に重ねる (重ねた {overlayShown?.Count ?? 0} 件{(overlayShown is [var first] ? $"、位置 {first.Left:0},{first.Top:0}" : "")})");
+        text2.SetOcrHidden(true);
+        await Idle(text2);
+        Check(text2.Overlay.Shown("reading.translation") == null, "読み取りの画面を隠すと、重ねた訳も消える");
+        text2.SetOcrHidden(false);
+        settings.TranslationOverlay = false;
         text2.Hide();
         capture2.Hide();
 

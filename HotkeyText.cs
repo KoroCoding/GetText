@@ -44,11 +44,18 @@ public static class HotkeyText
         return key != Key.None && (modifiers.HasFlag(ModifierKeys.Control) || modifiers.HasFlag(ModifierKeys.Alt)) && !IsReserved(modifiers, key);
     }
 
-    /// <summary>Windows やどのアプリでも決まった働きのあるキー (Alt+F4 で閉じる など)。登録するとその働きを奪うので使わない。</summary>
+    /// <summary>
+    /// Windows やどのアプリでも決まった働きのあるキー (Alt+F4 で閉じる・Ctrl+C でコピー など)。登録するとすべてのアプリでその働きを奪うので使わない。
+    /// F1〜F24 以外は、修飾キーを 2 つ以上 (Ctrl+Alt・Ctrl+Shift など) にする (Ctrl+英字・Alt+英字はアプリのコピー・メニューに使われる)。
+    /// </summary>
     public static bool IsReserved(ModifierKeys modifiers, Key key) =>
-        (modifiers.HasFlag(ModifierKeys.Alt) && key is Key.F4 or Key.Space or Key.Tab or Key.Escape)
+        (Modifiers(modifiers) < 2 && key is not (>= Key.F1 and <= Key.F24))
+        || (modifiers.HasFlag(ModifierKeys.Alt) && key is Key.F4 or Key.Space or Key.Tab or Key.Escape)
         || (modifiers.HasFlag(ModifierKeys.Control) && key == Key.Escape)
         || (modifiers.HasFlag(ModifierKeys.Control) && modifiers.HasFlag(ModifierKeys.Alt) && key == Key.Delete);
+
+    private static int Modifiers(ModifierKeys m) =>
+        (m.HasFlag(ModifierKeys.Control) ? 1 : 0) + (m.HasFlag(ModifierKeys.Alt) ? 1 : 0) + (m.HasFlag(ModifierKeys.Shift) ? 1 : 0) + (m.HasFlag(ModifierKeys.Windows) ? 1 : 0);
 
     /// <summary>修飾キーとキーを「Ctrl+Alt+C」のような文字にする。</summary>
     public static string Format(ModifierKeys modifiers, Key key)

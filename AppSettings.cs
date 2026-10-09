@@ -136,6 +136,8 @@ public sealed class AppSettings
     public OcrView OcrView { get; set; } = OcrView.Text;
 
     public bool Translate { get; set; } = true;
+    /// <summary>日本語訳を、読み取りの枠の中のその文の位置にも重ねて出す (翻訳がオンのときだけ。読み取りの画面で訳した文をそのまま使う)。</summary>
+    public bool TranslationOverlay { get; set; }
     public TranslationEngine TranslationEngine { get; set; } = TranslationEngine.Local;
     /// <summary>DPAPI (現在の Windows ユーザーだけが復号できる) で暗号化した DeepL キー。</summary>
     public string? DeepLKeyProtected { get; set; }

@@ -18,8 +18,21 @@ public sealed class AiOcr : IDisposable
     /// <summary>"gpu" または "cpu" (起動前は null)。</summary>
     public string? Device => _worker.ReadyInfo?["device"]?.GetValue<string>();
 
+    private long _lastUsedTicks = DateTime.UtcNow.Ticks;
+    private int _inUse;
+
+    /// <summary>
+    /// 最後に使ってからの時間 (読み取りの途中なら 0)。読み取りの画面・Quick OCR・拡張機能・開発者向けの API のどれから使っても数える
+    /// (使っている間に、読み取りの画面の「しばらく使っていない」で止めないように)。
+    /// </summary>
+    public TimeSpan IdleFor => Volatile.Read(ref _inUse) > 0 ? TimeSpan.Zero
+        : DateTime.UtcNow - new DateTime(Interlocked.Read(ref _lastUsedTicks), DateTimeKind.Utc);
+
+    private void Touch() => Interlocked.Exchange(ref _lastUsedTicks, DateTime.UtcNow.Ticks);
+
     public Task EnsureStartedAsync()
     {
+        Touch();
         if (!IsInstalled)
             return Task.FromException(new InvalidOperationException(
                 "AI OCR が未セットアップです (設定の「セットアップを実行」で入れてください)"));
@@ -37,6 +50,20 @@ public sealed class AiOcr : IDisposable
     /// accurate なら高精度の認識モデルで読む (遅い。画面が止まったときの読み直し用)。
     /// </summary>
     public async Task<List<OcrLineData>> RecognizeAsync(byte[] bgra, int width, int height, CancellationToken ct, bool accurate = false)
+    {
+        Interlocked.Increment(ref _inUse);
+        try
+        {
+            return await RecognizeCoreAsync(bgra, width, height, ct, accurate);
+        }
+        finally
+        {
+            Touch();
+            Interlocked.Decrement(ref _inUse);
+        }
+    }
+
+    private async Task<List<OcrLineData>> RecognizeCoreAsync(byte[] bgra, int width, int height, CancellationToken ct, bool accurate)
     {
         await EnsureStartedAsync();
         // chars: 1 文字ずつの位置も返してもらう (検索の印を一致した文字の上に付けるため)
@@ -81,7 +108,8 @@ public sealed class AiOcr : IDisposable
         var rows = new List<OcrLineData>();
         foreach (var line in lines)
         {
-            int i = rows.FindLastIndex(r => SameRow(r, line));
+            // (間にほかの行がある断片はまとめない: 高さのそろった 1 つ飛ばしの枠 (A の枠と C の枠) の文字を 1 行にしない)
+            int i = rows.FindLastIndex(r => SameRow(r, line) && !lines.Any(x => Between(x, r, line)));
             if (i < 0)
             {
                 rows.Add(line);
@@ -109,6 +137,16 @@ public sealed class AiOcr : IDisposable
         bool separated = b.Left >= a.Right - 2 || b.Right <= a.Left + 2;
         bool shortPiece = a.Right - a.Left < ha * 6 || b.Right - b.Left < hb * 6;
         return separated && shortPiece;
+    }
+
+    // x が a と b の間 (左右の間の空き) にあり、高さが a か b と重なるか
+    private static bool Between(OcrLineData x, OcrLineData a, OcrLineData b)
+    {
+        if (ReferenceEquals(x, a) || ReferenceEquals(x, b)) return false;
+        var (l, r) = a.Left <= b.Left ? (a, b) : (b, a);
+        if (x.Left < l.Right - 2 || x.Right > r.Left + 2) return false;
+        double top = Math.Min(a.Top, b.Top), bottom = Math.Max(a.Bottom, b.Bottom);
+        return Math.Min(bottom, x.Bottom) - Math.Max(top, x.Top) > 0;
     }
 
     public void Dispose() => _worker.Dispose();

@@ -130,6 +130,118 @@ public class OcrLayoutTests
         Assert.All(grouping.Groups, g => Assert.Equal(4, g.Lines.Count));
     }
 
+    // 1 文字ずつの位置つきの行 (AI OCR と同じ形: 文字列は 1 つ、空白は位置を持たない)。parts は (文字, 左端)
+    private static OcrLineData Chars(double top, params (string Text, double Left)[] parts)
+    {
+        var spans = new List<OcrSpan>();
+        foreach (var (text, left) in parts)
+        {
+            double x = left;
+            foreach (var c in text)
+            {
+                if (c == ' ') { x += 6; continue; }
+                spans.Add(new OcrSpan(c.ToString(), x, top, x + 10, top + 16));
+                x += 11;
+            }
+        }
+        return new OcrLineData([string.Join(" ", parts.Select(p => p.Text))], spans.Min(s => s.Left), top, spans.Max(s => s.Right), top + 16, spans);
+    }
+
+    // 名簿の画像 (1 行 × 3 列の枠。枠どうしは少し離れ、それぞれに枠線がある: 関西電力の名簿のスライドと同じ形)
+    private static Canvas ThreeBoxes()
+    {
+        var canvas = new Canvas(660, 240);
+        for (int col = 0; col < 3; col++) canvas.Rect(20 + col * 210, 20, 20 + col * 210 + 200, 220);
+        return canvas;
+    }
+
+    [Fact]
+    public void RowsMergedAcrossBoxesAreSplitPerBox()
+    {
+        // OCR が同じ高さに並んだ隣の枠の文字を 1 行にまとめた (A と B は同じ高さ、C は別の行)
+        var canvas = ThreeBoxes();
+        var lines = new List<OcrLineData>();
+        for (int i = 0; i < 6; i++)
+        {
+            lines.Add(Chars(40 + i * 28, ($"A-{i + 1}-イトウ コウダイ", 32), ($"B-{i + 1}-オザワ リョウ", 242)));
+            lines.Add(Chars(46 + i * 28, ($"C-{i + 1}-オギノ ショウキ", 452)));
+        }
+        var segments = OcrLayout.FindSegments(canvas.Pixels, canvas.Width, canvas.Height, lines);
+        // 1 行にまとまった文字が枠線の上を通っても、縦の枠線を「文字の中の線」として捨てない
+        Assert.True(segments.Count(s => !s.Horizontal) >= 6, $"縦の枠線 {segments.Count(s => !s.Horizontal)} 本");
+        var grouping = OcrLayout.Group(lines, segments);
+        Assert.True(grouping.FromFrames);
+        Assert.Equal(3, grouping.Groups.Count);
+        Assert.Equal(Enumerable.Range(1, 6).Select(i => $"A-{i}-イトウ コウダイ"), grouping.Groups[0].Lines.Select(l => l.Compact));
+        Assert.Equal(Enumerable.Range(1, 6).Select(i => $"B-{i}-オザワ リョウ"), grouping.Groups[1].Lines.Select(l => l.Compact));
+        Assert.All(grouping.Groups[2].Lines, l => Assert.StartsWith("C-", l.Compact));
+        var text = OcrLayout.ToDocument(grouping, joinCjk: true, correct: false).ToDisplayText();
+        Assert.StartsWith("【1】\r\nA-1-イトウ コウダイ\r\nA-2-イトウ コウダイ", text);
+        Assert.Contains("【2】\r\nB-1-オザワ リョウ", text);
+        // 分けた行にも文字の位置が残る (検索の印)
+        Assert.All(grouping.Groups.SelectMany(g => g.Lines), l => Assert.NotNull(l.Spans));
+    }
+
+    [Fact]
+    public void WindowsOcrWordsMergedAcrossBoxesAreSplit()
+    {
+        // Windows OCR の形 (単語ごとの文字列と位置)。1 行に 2 つの枠の単語が入った
+        var canvas = ThreeBoxes();
+        var lines = new List<OcrLineData>();
+        for (int i = 0; i < 4; i++)
+        {
+            double top = 40 + i * 28;
+            string[] words = [$"A-{i + 1}", "山田", $"B-{i + 1}", "佐藤"];
+            double[] lefts = [32, 80, 242, 290];
+            var spans = words.Select((w, k) => new OcrSpan(w, lefts[k], top, lefts[k] + 40, top + 16)).ToArray();
+            lines.Add(new OcrLineData(words, 32, top, 330, top + 16, spans));
+        }
+        var grouping = OcrLayout.Group(lines, OcrLayout.FindSegments(canvas.Pixels, canvas.Width, canvas.Height, lines));
+        Assert.Equal(2, grouping.Groups.Count);
+        Assert.Equal(["A-1", "山田"], grouping.Groups[0].Lines[0].Words);
+        Assert.Equal(["B-1", "佐藤"], grouping.Groups[1].Lines[0].Words);
+    }
+
+    [Fact]
+    public void WideGapInsideALineSplitsColumnsWithoutFrames()
+    {
+        // 枠が無くても、行の中が大きく空いていれば (行の高さの 3 倍より広い) 別の列
+        var lines = new List<OcrLineData>();
+        for (int i = 0; i < 4; i++) lines.Add(Chars(20 + i * 22, ($"左の列{i}", 20), ($"右の列{i}", 300)));
+        var grouping = OcrLayout.Group(lines, []);
+        Assert.True(grouping.HasGroups);
+        Assert.Equal(["左の列0", "右の列0"], grouping.Groups.Select(g => g.Lines[0].Compact));
+        Assert.All(grouping.Groups, g => Assert.Equal(4, g.Lines.Count));
+        // ふつうの単語の間の空き (行の高さくらい) では分けない
+        Assert.Single(OcrLayout.SplitAcross([Chars(0, ("Hello", 0), ("world", 70))], []));
+    }
+
+    [Fact]
+    public void LinesInAGroupAreReadTopToBottom()
+    {
+        // OCR が枠の中の行を下から返しても (Windows OCR で見られた)、上から順に並べる
+        var canvas = ThreeBoxes();
+        var lines = new List<OcrLineData>();
+        for (int i = 3; i >= 0; i--)
+        {
+            lines.Add(Line($"Q-{i + 1} 名前", 32, 40 + i * 28));
+            lines.Add(Line($"R-{i + 1} 名前", 242, 40 + i * 28));
+        }
+        var grouping = OcrLayout.Group(lines, OcrLayout.FindSegments(canvas.Pixels, canvas.Width, canvas.Height, lines));
+        Assert.Equal(["Q-1 名前", "Q-2 名前", "Q-3 名前", "Q-4 名前"], grouping.Groups[0].Lines.Select(l => l.Compact));
+        Assert.Equal(["R-1 名前", "R-2 名前", "R-3 名前", "R-4 名前"], grouping.Groups[1].Lines.Select(l => l.Compact));
+    }
+
+    [Fact]
+    public void LinesWithoutPositionsAreKept()
+    {
+        // 文字の位置が無い行は、どこで分ければよいか分からないのでそのまま
+        var canvas = ThreeBoxes();
+        var lines = new List<OcrLineData> { Line("A-1 山田 B-1 佐藤", 32, 40, 300), Line("A-2 鈴木", 32, 70) };
+        var split = OcrLayout.SplitAcross(lines, OcrLayout.FindSegments(canvas.Pixels, canvas.Width, canvas.Height, lines));
+        Assert.Equal(2, split.Count);
+    }
+
     [Fact]
     public void FilledBlocksAreNotFrames()
     {

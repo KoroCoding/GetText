@@ -57,9 +57,19 @@ public partial class HomeWindow : Window
         _text = text;
         _settings = settings;
         MinimizeCheck.IsChecked = settings.HomeMinimizeOnOpen;
+        Activated += (_, _) => MinimizeCheck.IsChecked = _settings.HomeMinimizeOnOpen; // (設定の画面で変えたとき)
         AppCommands.RegisterBuiltIns(this, text, settings);
         AppCommands.SetHost(text);
-        foreach (var feature in AppCommands.Features) _tiles.Add(new FeatureTile(feature));
+        foreach (var feature in AppCommands.Features.Where(f => !f.InReadingWindow)) _tiles.Add(new FeatureTile(feature));
+        // 拡張機能のタイルの状態 (「記録中 ・ 12 枚」など) は、ホームが出ている間 1 秒ごとに描き直す (前に出たときだけでは古くなる)
+        var refresh = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        refresh.Tick += (_, _) =>
+        {
+            if (!IsVisible || WindowState == WindowState.Minimized) return;
+            foreach (var tile in _tiles.Where(t => t.Info.Id.StartsWith("plugin:", StringComparison.Ordinal))) tile.Refresh();
+        };
+        refresh.Start();
+        Closed += (_, _) => refresh.Stop();
         FeatureList.ItemsSource = _tiles;
         text.FeaturesChanged += () => Dispatcher.BeginInvoke(UpdateCards);
         // 読み取りの画面 (アプリの中心) が閉じたら GetText を終える (終了の確認と保存は読み取りの画面が行う)
@@ -119,7 +129,7 @@ public partial class HomeWindow : Window
     {
         if (_demo || _exiting) return;
         _tiles.Clear();
-        foreach (var feature in AppCommands.Features) _tiles.Add(new FeatureTile(feature));
+        foreach (var feature in AppCommands.Features.Where(f => !f.InReadingWindow)) _tiles.Add(new FeatureTile(feature));
         FeatureList.ItemsSource = null;
         FeatureList.ItemsSource = _tiles;
         UpdateCards();
@@ -258,11 +268,14 @@ public partial class HomeWindow : Window
     private bool _exitInProgress;
     private bool _abandoned;
     private Action? _afterExit;
+    /// <summary>確かめるときの言い方 (「終了」「再起動」)。</summary>
+    private string _exitAction = "終了";
 
-    /// <summary>GetText を終える (録画・議事録を止めてよいか先に聞く)。終わった後に after を行う (セットアップの起動など)。</summary>
-    public void ExitThen(Action after)
+    /// <summary>GetText を終える (録画・議事録を止めてよいか先に聞く)。終わった後に after を行う (セットアップの起動・再起動など)。</summary>
+    public void ExitThen(Action after, string action = "終了")
     {
         _afterExit = after;
+        _exitAction = action;
         _ = ExitAsync();
     }
 
@@ -293,17 +306,31 @@ public partial class HomeWindow : Window
             if (recorder is { IsRecording: true })
             {
                 if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
-                if (MessageBox.Show(this, "画面を録画中です。録画を止めて保存し、GetText を終了しますか？", "GetText",
+                if (MessageBox.Show(this, $"画面を録画中です。録画を止めて保存し、GetText を{_exitAction}しますか？", "GetText",
                         MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.Yes) != MessageBoxResult.Yes)
                 {
                     _afterExit = null;
                     return;
                 }
             }
-            if (_text.Minutes is { IsBusy: true } minutes && !minutes.ConfirmStop("、GetText を終了します"))
+            if (_text.Minutes is { IsBusy: true } minutes && !minutes.ConfirmStop($"、GetText を{_exitAction}します"))
             {
                 _afterExit = null;
                 return;
+            }
+            // 拡張機能が動かしている機能 (スライドの記録など) も、黙って止めない
+            var running = AppCommands.Features
+                .Where(f => f.Id.StartsWith("plugin:", StringComparison.Ordinal) && !f.InReadingWindow && f.Status().State == FeatureState.Active)
+                .Select(f => f.Name).ToList();
+            if (running.Count > 0)
+            {
+                if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+                if (MessageBox.Show(this, $"{string.Join("・", running)} が動いています。止めて GetText を{_exitAction}しますか？", "GetText",
+                        MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+                {
+                    _afterExit = null;
+                    return;
+                }
             }
             // 録画を止めて書き終えるまで待つ (始めている・書き終えている途中でも待つ。途中で終えるとファイルが壊れる)
             if (recorder is { IsBusy: true })
@@ -311,7 +338,7 @@ public partial class HomeWindow : Window
                 if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
                 await recorder.StopAndWaitAsync();
                 // (待っている間に議事録の記録を始めた)
-                if (_text.Minutes is { IsBusy: true } started && !started.ConfirmStop("、GetText を終了します"))
+                if (_text.Minutes is { IsBusy: true } started && !started.ConfirmStop($"、GetText を{_exitAction}します"))
                 {
                     _afterExit = null;
                     return;
@@ -323,6 +350,7 @@ public partial class HomeWindow : Window
         finally
         {
             _exitInProgress = false;
+            _exitAction = "終了";
         }
     }
 

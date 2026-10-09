@@ -68,7 +68,16 @@ public partial class HomeWindow : Window
         if (text != null)
         {
             AppCommands.RegisterBuiltIns(this, text, settings);
-            foreach (var feature in AppCommands.Features) _tiles.Add(new FeatureTile(feature));
+            foreach (var feature in AppCommands.Features.Where(f => !f.InReadingWindow)) _tiles.Add(new FeatureTile(feature));
+            // 拡張機能のタイルの状態 (「記録中 ・ 12 枚」など) は、ホームが出ている間 1 秒ごとに描き直す (前に出たときだけでは古くなる)
+            var refresh = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            refresh.Tick += (_, _) =>
+            {
+                if (!IsVisible || WindowState == WindowState.Minimized) return;
+                foreach (var tile in _tiles.Where(t => t.Info.Id.StartsWith("plugin:", StringComparison.Ordinal))) tile.Refresh();
+            };
+            refresh.Start();
+            Closed += (_, _) => refresh.Stop();
             FeatureList.ItemsSource = _tiles;
             text.FeaturesChanged += () => Dispatcher.UIThread.Post(UpdateCards);
             // 読み取りの画面 (アプリの中心) が閉じたら GetText を終える (終了の確認と保存は読み取りの画面が行う)
@@ -120,7 +129,7 @@ public partial class HomeWindow : Window
     {
         if (_demo || _exiting || _text == null) return;
         _tiles.Clear();
-        foreach (var feature in AppCommands.Features) _tiles.Add(new FeatureTile(feature));
+        foreach (var feature in AppCommands.Features.Where(f => !f.InReadingWindow)) _tiles.Add(new FeatureTile(feature));
         FeatureList.ItemsSource = null;
         FeatureList.ItemsSource = _tiles;
         UpdateCards();
@@ -253,6 +262,11 @@ public partial class HomeWindow : Window
             // 止める前に、録画と議事録の両方を止めてよいか聞く (片方を止めてから「止めない」を選ばれないように)
             if (!await ConfirmRecordingAsync(this)) return;
             if (_text.Minutes is { IsBusy: true } minutes && !await minutes.ConfirmStopAsync("GetText を終了します")) return;
+            // 拡張機能が動かしている機能 (スライドの記録など) も、黙って止めない
+            var running = AppCommands.Features
+                .Where(f => f.Id.StartsWith("plugin:", StringComparison.Ordinal) && !f.InReadingWindow && f.Status().State == FeatureState.Active)
+                .Select(f => f.Name).ToList();
+            if (running.Count > 0 && !await Dialogs.ConfirmAsync(this, $"{string.Join("・", running)} が動いています。止めて GetText を終了しますか？", "GetText", "止めて終了")) return;
             await StopRecordingAndWaitAsync();
             _text.RequestExit(minutesConfirmed: true);
         }

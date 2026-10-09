@@ -58,8 +58,12 @@ public interface IDocumentService
     Task<CapturedImage> RenderPdfPageAsync(string path, int pageIndex, double dpi, int maxSize, CancellationToken cancellationToken);
 }
 
-/// <summary>画面の上に重ねて出す文字 1 つ (位置は画面の物理ピクセル。この四角に収まるように GetText が文字の大きさを決める)。</summary>
-public sealed record OverlayLabel(double Left, double Top, double Right, double Bottom, string Text);
+/// <summary>画面の上に重ねて出す文字 1 つ (位置は画面の物理ピクセル。この四角に収まるように GetText が文字の大きさを決め、折り返す)。</summary>
+public sealed record OverlayLabel(double Left, double Top, double Right, double Bottom, string Text)
+{
+    /// <summary>四角が覆う元の文字の行の数 (文字の大きさの目安。折り返した文をまとめた四角なら 2 以上)。</summary>
+    public int Lines { get; init; } = 1;
+}
 
 /// <summary>
 /// 画面の上に文字を重ねて出す (訳など)。描くのは GetText (色・字・角はデザインのとおり)。

@@ -59,7 +59,7 @@ public sealed class HelloPlugin : IGetTextPlugin
 
 | メソッド | 出る場所 |
 | --- | --- |
-| `AddFeature(PluginFeature)` | ホームのタイル。`Status` で「開いています」「記録中」などを返す |
+| `AddFeature(PluginFeature)` | ホームのタイル。`Status` で「開いています」「記録中」などを返す。読み取りの画面が読んだ文字を使う機能 (`OcrFrameRead`) は `Placement = PluginFeaturePlacement.ReadingWindow` にすると、読み取りの画面の 表示 ▾ に切り替えとして出る (`Close` が要る。ホームには出ない) |
 | `AddCommand(PluginCommand)` | コマンドの一覧 (Ctrl+K / ⌘K) |
 | `AddSettings(PluginSettingsPage)` | 設定 → 拡張機能 の「設定」。種類は Toggle・Text・MultilineText・Number・Choice、`Advanced` で「詳細設定」に入れる |
 | `Notify(PluginNotification)` | 右下の知らせ (操作のボタン・音も付けられる) |

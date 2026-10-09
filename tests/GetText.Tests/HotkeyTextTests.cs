@@ -7,7 +7,8 @@ public class HotkeyTextTests
     [Theory]
     [InlineData("Ctrl+Alt+C", ModifierKeys.Control | ModifierKeys.Alt, Key.C)]
     [InlineData("ctrl + shift + F9", ModifierKeys.Control | ModifierKeys.Shift, Key.F9)]
-    [InlineData("Alt+1", ModifierKeys.Alt, Key.D1)]
+    [InlineData("Alt+Shift+1", ModifierKeys.Alt | ModifierKeys.Shift, Key.D1)]
+    [InlineData("Ctrl+F9", ModifierKeys.Control, Key.F9)] // (F キーは修飾キー 1 つでよい)
     public void 読める(string text, ModifierKeys modifiers, Key key)
     {
         Assert.True(HotkeyText.TryParse(text, out var m, out var k));
@@ -21,6 +22,9 @@ public class HotkeyTextTests
     [InlineData("Ctrl+Alt")]     // キーが無い
     [InlineData("Ctrl+C+V")]     // キーが 2 つ
     [InlineData("Ctrl+Nothing")]
+    [InlineData("Ctrl+C")]       // すべてのアプリのコピーを奪う
+    [InlineData("Ctrl+K")]
+    [InlineData("Alt+1")]        // Alt+英数字はアプリのメニュー・切り替えに使われる
     public void 使えないキーは読まない(string text) => Assert.False(HotkeyText.TryParse(text, out _, out _));
 
     [Fact]

@@ -9,12 +9,15 @@ using static GetText.NativeMethods;
 namespace GetText;
 
 /// <summary>
-/// 画面の上に文字を重ねて出す (Windows)。拡張機能 (訳を重ねる など) のための GetText の部品。
+/// 画面の上に文字を重ねて出す (Windows)。読み取りの画面の「訳を画面に重ねる」と、拡張機能 (IOverlayService) のための GetText の部品。
 /// 窓はクリックを下に通し (WS_EX_TRANSPARENT)、画面の取り込みに写らない (読み取りが自分の訳を読まないように)。
 /// </summary>
 public sealed class WindowsOverlayService(Func<bool> canShow) : IOverlayService
 {
     private readonly Dictionary<string, OverlayWindow> _windows = [];
+
+    /// <summary>動作確認用: 今出している文字 (出していなければ null)。</summary>
+    internal IReadOnlyList<OverlayLabel>? Shown(string owner) => _windows.TryGetValue(owner, out var w) && !w.WasClosed ? w.Labels : null;
 
     public void Show(string owner, IReadOnlyList<OverlayLabel> labels) => Application.Current.Dispatcher.BeginInvoke(() =>
     {
@@ -78,9 +81,15 @@ public sealed class WindowsOverlayService(Func<bool> canShow) : IOverlayService
             if (!WasClosed) Close();
         }
 
+        public IReadOnlyList<OverlayLabel> Labels { get; private set; } = [];
+
+        /// <summary>動作確認用: 折り返した後の文字の大きさ (四角に収めたもの)。</summary>
+        public IEnumerable<double> FontSizes => _canvas.Children.OfType<Border>().Select(b => ((TextBlock)b.Child).FontSize);
+
         public void SetLabels(IReadOnlyList<OverlayLabel> labels)
         {
             if (WasClosed) return;
+            Labels = labels;
             double left = labels.Min(l => l.Left), top = labels.Min(l => l.Top);
             double right = labels.Max(l => l.Right), bottom = labels.Max(l => l.Bottom);
             if (!IsVisible)
@@ -98,7 +107,7 @@ public sealed class WindowsOverlayService(Func<bool> canShow) : IOverlayService
             foreach (var label in labels)
             {
                 double w = Math.Max(8, (label.Right - label.Left) / scale), h = Math.Max(8, (label.Bottom - label.Top) / scale);
-                var text = new TextBlock { Text = label.Text, FontSize = Math.Clamp(h * 0.72, 9, 48), TextWrapping = TextWrapping.NoWrap };
+                var text = new TextBlock { Text = label.Text, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
                 text.SetResourceReference(TextBlock.ForegroundProperty, "Gt.TextPrimary");
                 var card = new Border
                 {
@@ -106,14 +115,22 @@ public sealed class WindowsOverlayService(Func<bool> canShow) : IOverlayService
                     Height = h,
                     Padding = new Thickness(2, 0, 2, 0),
                     Opacity = 0.96,
-                    // 長い訳は四角に収まるまで小さくする (はみ出して下の文字を隠さない)
-                    Child = new Viewbox { Child = text, Stretch = Stretch.Uniform, StretchDirection = StretchDirection.DownOnly, HorizontalAlignment = HorizontalAlignment.Left },
+                    ClipToBounds = true,
+                    Child = text,
                 };
                 card.SetResourceReference(Border.BackgroundProperty, "Gt.Surface");
                 card.SetResourceReference(Border.CornerRadiusProperty, "Gt.Radius.Small");
                 Canvas.SetLeft(card, (label.Left - left) / scale);
                 Canvas.SetTop(card, (label.Top - top) / scale);
-                _canvas.Children.Add(card);
+                _canvas.Children.Add(card); // (先に置いて、窓の字の形を受け継いでから大きさを測る)
+                // 折り返した文は四角の中で折り返し、長い訳は四角に収まるまで小さくする (はみ出して下の文字を隠さない)
+                double inner = Math.Max(1, w - 4);
+                text.FontSize = TranslationOverlay.FitFontSize(inner, h, label.Lines, (size, width) =>
+                {
+                    text.FontSize = size;
+                    text.Measure(new Size(width, double.PositiveInfinity));
+                    return text.DesiredSize.Height;
+                });
             }
         }
     }

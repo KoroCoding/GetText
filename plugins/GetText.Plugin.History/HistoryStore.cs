@@ -47,6 +47,12 @@ public sealed class HistoryStore
     /// <summary>続けて保存するときの最短の間隔 (読み取りは 1 秒ごとなので、短すぎる間隔では保存しない)。</summary>
     public TimeSpan MinInterval { get; set; } = TimeSpan.FromSeconds(2);
 
+    /// <summary>最後に保存した時刻 (続けて保存しない間隔を測る)。</summary>
+    public DateTimeOffset LastSaved
+    {
+        get { lock (_lock) return _lastSaved; }
+    }
+
     public int Count
     {
         get { lock (_lock) return Load().Count; }

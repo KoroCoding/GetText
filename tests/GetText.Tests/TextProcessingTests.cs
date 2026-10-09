@@ -143,6 +143,20 @@ public class MergeRowsTests
         ]);
         Assert.Equal(2, rows.Count);
     }
+
+    [Fact]
+    public void 間に別の行がある断片はまとめない()
+    {
+        // 名簿の 3 つの枠: A と C は同じ高さ、間の B は少しずれた高さ (A と C を 1 行にすると B が混ざって見える)
+        var rows = AiOcr.MergeRows(
+        [
+            new OcrLineData(["B-2-カミセ リョウ"], 400, 384, 560, 408),
+            new OcrLineData(["A-2-イワイ マユ"], 68, 397, 210, 421),
+            new OcrLineData(["C-2-シバタ リョウ"], 745, 397, 905, 421),
+        ]);
+        Assert.Equal(3, rows.Count);
+        Assert.DoesNotContain(rows, r => string.Concat(r.Words).Contains("A-2") && string.Concat(r.Words).Contains("C-2"));
+    }
 }
 
 public class TextAccumulatorTests

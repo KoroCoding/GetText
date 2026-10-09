@@ -51,6 +51,13 @@ public static class OcrSpans
 }
 
 /// <summary>OCR 結果を段落 → 行 の構造で持つ。</summary>
+/// <summary>翻訳の単位 (折り返した行をつないだ文) と、その行が画面で占める範囲 (読み取った画像のピクセル)。</summary>
+public sealed record TranslationUnit(string Text, double Left, double Top, double Right, double Bottom, int Lines)
+{
+    /// <summary>画面の上に範囲がある (枠・まとまりごとの見出し【1】などは画面に無い)。</summary>
+    public bool HasArea => Right > Left && Bottom > Top;
+}
+
 public sealed class OcrDocument
 {
     public List<List<OcrLineInfo>> Paragraphs { get; } = [];
@@ -128,19 +135,30 @@ public sealed class OcrDocument
     /// 翻訳用に、途中で折り返された行を 1 文につなげた単位を返す(段落ごと)。
     /// メニューや箇条書きのような短い行はつなげない。
     /// </summary>
-    public List<List<string>> ToTranslationUnits()
+    public List<List<string>> ToTranslationUnits() =>
+        TranslationUnits().Select(p => p.Select(u => u.Text).ToList()).ToList();
+
+    /// <summary><see cref="ToTranslationUnits"/> と同じ単位に、その行が画面で占める範囲を付けて返す (訳を画面に重ねるときに使う)。</summary>
+    public List<List<TranslationUnit>> TranslationUnits()
     {
-        var result = new List<List<string>>();
+        var result = new List<List<TranslationUnit>>();
         foreach (var paragraph in Paragraphs)
         {
             double maxWidth = paragraph.Max(l => l.Width);
-            var units = new List<string>();
+            var units = new List<TranslationUnit>();
             for (int i = 0; i < paragraph.Count; i++)
             {
+                var line = paragraph[i];
                 if (i > 0 && Continues(paragraph[i - 1], maxWidth))
-                    units[^1] = TextScript.Join(units[^1], paragraph[i].Text);
+                {
+                    var u = units[^1];
+                    units[^1] = new TranslationUnit(TextScript.Join(u.Text, line.Text),
+                        Math.Min(u.Left, line.Left), Math.Min(u.Top, line.Top), Math.Max(u.Right, line.Right), Math.Max(u.Bottom, line.Bottom), u.Lines + 1);
+                }
                 else
-                    units.Add(paragraph[i].Text);
+                {
+                    units.Add(new TranslationUnit(line.Text, line.Left, line.Top, line.Right, line.Bottom, 1));
+                }
             }
             result.Add(units);
         }

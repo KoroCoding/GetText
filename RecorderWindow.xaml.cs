@@ -29,6 +29,8 @@ public partial class RecorderWindow : Window
     private ScreenRecorder? _recorder;
     private bool _busy;
     private bool _closeConfirmed;
+    /// <summary>準備・書き終えている途中に × を押した: 終わったら閉じる。</summary>
+    private bool _closeWhenDone;
     private string? _lastPath;
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromMilliseconds(500) };
     private readonly DispatcherTimer _previewTimer = new() { Interval = TimeSpan.FromMilliseconds(160) };
@@ -314,7 +316,15 @@ public partial class RecorderWindow : Window
         {
             _busy = false;
             RecordButton.IsEnabled = ScreenRecorder.IsSupported;
+            CloseIfAsked();
         }
+    }
+
+    private void CloseIfAsked()
+    {
+        if (!_closeWhenDone) return;
+        _closeWhenDone = false;
+        Dispatcher.BeginInvoke(Close); // (録画中なら、止めて保存するかを聞く)
     }
 
     /// <summary>録画を止めて保存する。</summary>
@@ -357,6 +367,7 @@ public partial class RecorderWindow : Window
             _finishing = null;
             _busy = false;
             RecordButton.IsEnabled = ScreenRecorder.IsSupported;
+            CloseIfAsked();
             RestartPreview();
         }
     }
@@ -520,7 +531,13 @@ public partial class RecorderWindow : Window
     {
         if (_recorder == null && !_busy) return;
         e.Cancel = true;
-        if (_busy || _closeConfirmed) return;
+        if (_busy)
+        {
+            _closeWhenDone = true;
+            StatusText.Text = "録画の準備・書き終えるのを待っています… 終わると閉じます";
+            return;
+        }
+        if (_closeConfirmed) return;
         if (MessageBox.Show(this, "録画中です。録画を止めて保存し、閉じますか？", "GetText — 画面の録画",
                 MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.Yes) != MessageBoxResult.Yes)
             return;

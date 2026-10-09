@@ -196,15 +196,25 @@ public static class ModelCatalog
     /// <summary>消す (使っている最中で消せなければ、理由を伝える)。</summary>
     public static void Remove(ModelInfo model, string? folder = null)
     {
-        var dir = Path.Combine(folder ?? Folder, model.Id);
+        var root = folder ?? Folder;
+        var dir = Path.Combine(root, model.Id);
+        // 前に消しきれなかった残り (名前を変えたフォルダ) を片付ける
+        if (Directory.Exists(root))
+            foreach (var old in Directory.GetDirectories(root, "*.removing-*"))
+                try { Directory.Delete(old, recursive: true); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        if (!Directory.Exists(dir)) return;
+        // 先に名前を変える: 使用中なら変えられないので、何も消さずに知らせる (途中まで消して壊さない)
+        var trash = $"{dir}.removing-{Guid.NewGuid():N}";
         try
         {
-            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+            Directory.Move(dir, trash);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            throw new IOException($"「{model.Name}」は使用中のため消せませんでした。GetText を再起動してから、もう一度消してください。", ex);
+            throw new IOException($"「{model.Name}」は使用中のため消せませんでした (何も消していません)。GetText を再起動してから、もう一度消してください。", ex);
         }
+        try { Directory.Delete(trash, recursive: true); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { } // (残りは次に消すときに片付ける。モデルはもう使われない)
     }
 }
 

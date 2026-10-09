@@ -35,7 +35,7 @@ public sealed class PresentationPlugin : IGetTextPlugin
                 {
                     Key = SensitivityKey,
                     Label = "新しいスライドとみなす変化",
-                    Description = "ゆるめにすると、箇条書きが 1 行増えたくらいでも新しいスライドとして残します。",
+                    Description = "ゆるめにすると、箇条書きが 1 行増えたくらいでも新しいスライドとして残します。記録中に変えたときは、次に始めたときから使います。",
                     Kind = PluginSettingKind.Choice,
                     Default = "normal",
                     Choices =
@@ -49,7 +49,7 @@ public sealed class PresentationPlugin : IGetTextPlugin
                 {
                     Key = IntervalKey,
                     Label = "画面を見る間隔 (秒)",
-                    Description = "短いほど早く気づきますが、PC の負担が増えます。",
+                    Description = "短いほど早く気づきますが、PC の負担が増えます。記録中に変えたときは、次に始めたときから使います。",
                     Kind = PluginSettingKind.Number,
                     Default = "1",
                     Minimum = 0.5,
@@ -86,6 +86,7 @@ public sealed class PresentationPlugin : IGetTextPlugin
             IsAvailable = () => Volatile.Read(ref _phase) == Running,
             Execute = _ => StopAsync(),
         });
+        _ = Task.Run(CleanOldSessions);
     }
 
     private PluginFeatureStatus Status()
@@ -104,6 +105,30 @@ public sealed class PresentationPlugin : IGetTextPlugin
         "loose" => SlideSensitivity.Loose,
         _ => SlideSensitivity.Normal,
     };
+
+    /// <summary>
+    /// 前の記録の画像のフォルダを片付ける: 空のフォルダと、30 日より前のものを消す
+    /// (PPTX に保存しなかった・終了で止めた記録の画像を、いつまでも溜め込まない)。
+    /// </summary>
+    private void CleanOldSessions()
+    {
+        var root = Path.Combine(_context!.DataDirectory, "sessions");
+        if (!Directory.Exists(root)) return;
+        foreach (var dir in Directory.GetDirectories(root))
+        {
+            if (string.Equals(dir, Volatile.Read(ref _session), StringComparison.OrdinalIgnoreCase)) continue; // (今始めた記録)
+            try
+            {
+                var info = new DirectoryInfo(dir);
+                if (!info.EnumerateFileSystemInfos().Any() || DateTime.Now - info.LastWriteTime > TimeSpan.FromDays(30))
+                    info.Delete(recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _context.Log.Warn("前の記録のフォルダを消せませんでした: " + ex.GetType().Name);
+            }
+        }
+    }
 
     private async Task StartAsync()
     {
@@ -193,8 +218,9 @@ public sealed class PresentationPlugin : IGetTextPlugin
             {
                 break;
             }
-            catch (Exception ex) when (ex is InvalidOperationException or IOException or TimeoutException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                // (どんな問題でも繰り返しを止めない: 止まるとタイルが「記録中」のまま、何も残らなくなる)
                 _context!.Log.Error("画面を取り込めませんでした", ex);
                 failures++;
             }
@@ -255,6 +281,7 @@ public sealed class PresentationPlugin : IGetTextPlugin
         {
             try { await _loop; }
             catch (OperationCanceledException) { }
+            catch (Exception ex) { context.Log.Error("記録の繰り返しが止まりました", ex); } // (ここまでのスライドは保存する)
         }
         run.Dispose();
         List<string> slides;

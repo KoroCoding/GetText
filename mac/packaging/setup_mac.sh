@@ -20,8 +20,8 @@ while [ $# -gt 0 ]; do
         --english-only) english_only=1 ;;
         --with-nllb) with_nllb=1 ;;
         --skip-models) skip_models=1 ;;
-        --python) python_base="$2"; shift ;;
-        --root) root="$2"; shift ;;
+        --python) python_base="${2:?--python には Python の場所が要ります}"; shift ;;
+        --root) root="${2:?--root には入れる場所が要ります}"; shift ;;
         *) echo "知らない指定です: $1"; exit 2 ;;
     esac
     shift

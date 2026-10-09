@@ -27,7 +27,6 @@
     <ProjectReference Include="..\..\plugins\GetText.Plugin.History\GetText.Plugin.History.csproj" />
     <ProjectReference Include="..\..\plugins\GetText.Plugin.DocumentOcr\GetText.Plugin.DocumentOcr.csproj" />
     <ProjectReference Include="..\..\plugins\GetText.Plugin.Barcode\GetText.Plugin.Barcode.csproj" />
-    <ProjectReference Include="..\..\plugins\GetText.Plugin.TranslationOverlay\GetText.Plugin.TranslationOverlay.csproj" />
   </ItemGroup>
 
   <ItemGroup>

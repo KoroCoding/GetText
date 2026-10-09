@@ -38,7 +38,7 @@ public partial class SettingsWindow : Window
         ScaleBox.SelectedItem = SettingsOptions.Find(SettingsOptions.Scales, settings.Scale);
         AccuracyCheck.IsChecked = settings.HighAccuracy;
 
-        TranslateCheck.IsChecked = settings.Translate;
+        LoadTranslation();
         EngineBox.ItemsSource = SettingsOptions.TranslationEngines;
         EngineBox.SelectedItem = SettingsOptions.Find(SettingsOptions.TranslationEngines, settings.TranslationEngine);
 
@@ -379,6 +379,7 @@ public partial class SettingsWindow : Window
             : "AI は記号・表・小さな文字まで正確に読めます (要セットアップ)。使えないときは自動で Windows 標準に切り替わります。";
 
         EngineBox.IsEnabled = _settings.Translate;
+        OverlayCheck.IsChecked = _settings.Translate && _settings.TranslationOverlay; // (翻訳を切ると重ねるのも止まる)
         DeepLRow.Visibility = _settings.TranslationEngine == TranslationEngine.DeepL ? Visibility.Visible : Visibility.Collapsed;
         KeyStatus.Text = string.IsNullOrEmpty(_settings.GetDeepLKey())
             ? "未設定です。DeepL API Free (月 50 万文字まで無料) のキーを入力してください。"
@@ -508,7 +509,7 @@ public partial class SettingsWindow : Window
             bool taken = HotkeyText.Actions.Any(a => a.Id != id && HotkeyText.For(_settings, a.Id) == text);
             shown.Text = HotkeyText.Display(text);
             bool reserved = HotkeyText.IsReserved(System.Windows.Input.Keyboard.Modifiers, key);
-            prompt.Text = reserved ? "Windows で決まった働きのあるキーです (Alt+F4 など)。別のキーを押してください。" : !valid ? "Ctrl か Alt と一緒に押してください。" : taken ? "ほかの操作で使っているキーです。別のキーを押してください。" : "このキーにするなら「決定」を押してください。";
+            prompt.Text = reserved ? "ほかのアプリの操作 (Ctrl+C のコピー・Alt+F4 など) を奪うキーです。Ctrl+Alt や Ctrl+Shift と一緒に押してください。" : !valid ? "Ctrl か Alt と一緒に押してください。" : taken ? "ほかの操作で使っているキーです。別のキーを押してください。" : "このキーにするなら「決定」を押してください。";
             ok.IsEnabled = valid && !taken;
             chosen = valid && !taken ? text : null;
         };
@@ -599,6 +600,22 @@ public partial class SettingsWindow : Window
     {
         _settings.Translate = TranslateCheck.IsChecked == true;
         Changed(nameof(AppSettings.Translate));
+    }
+
+    /// <summary>翻訳する・訳を重ねるの表示を今の設定に合わせる (読み取りの画面の 表示 で切り替えたとき)。</summary>
+    public void LoadTranslation()
+    {
+        TranslateCheck.IsChecked = _settings.Translate;
+        OverlayCheck.IsChecked = _settings.Translate && _settings.TranslationOverlay;
+        EngineBox.IsEnabled = _settings.Translate;
+    }
+
+    private void OverlayCheck_Click(object sender, RoutedEventArgs e)
+    {
+        // 重ねるには翻訳が要る (読み取りの画面の 表示 → 訳を画面に重ねる と同じ)
+        if (OverlayCheck.IsChecked == true != (_settings.Translate && _settings.TranslationOverlay)) _main.ToggleOverlay();
+        LoadTranslation();
+        UpdateDependentState();
     }
 
     private void EngineBox_SelectionChanged(object sender, SelectionChangedEventArgs e)

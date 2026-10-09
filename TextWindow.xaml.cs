@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using GetText.Plugins;
 using Windows.Media.Ocr;
 
 namespace GetText;
@@ -90,7 +91,16 @@ public partial class TextWindow : Window
     private long _lastOcrMs;
     private bool _accumulating;
     private OcrDocument? _doc;
-    private List<List<(string Text, ScriptKind Kind)>> _units = [];
+    /// <summary>翻訳の単位 (範囲つき) と種類。段落ごと。</summary>
+    private List<List<(TranslationUnit Unit, ScriptKind Kind)>> _units = [];
+    /// <summary>直前に読み取った範囲 (画面の物理ピクセル。訳を重ねる位置の基準)。枠を動かしたら空にする。</summary>
+    private Int32Rect _readRect = Int32Rect.Empty;
+    /// <summary>枠を動かした・大きさを変えた回数 (読み取りの途中で動かしたら、その回の位置は使わない)。</summary>
+    private int _frameMoves;
+    /// <summary>読み取った位置が今の画面と合わない (枠を動かした後、まだ読み直していない)。枠の上の印・重ねる訳を出さない。</summary>
+    private bool _positionsStale;
+    private const string HoldNote = "選択中のため更新を保留中";
+    private const string OverlayOwner = "reading.translation";
 
     private bool _translating;
     private DateTime _nextTranslateAt = DateTime.MinValue;
@@ -103,8 +113,11 @@ public partial class TextWindow : Window
     public AiOcr AiOcr => _aiOcr;
     public Translator Translator => _translator;
 
+    /// <summary>画面に文字を重ねる部品 (訳を画面に重ねる・拡張機能)。読み取りの画面を隠すと消える。</summary>
+    public WindowsOverlayService Overlay { get; }
+
     /// <summary>利用者が選んだ読み取りの方式 (拡張機能・Quick OCR が方式を指定しないときに使う)。</summary>
-    public string PreferredOcrProvider => UseAiOcr ? "ai" : "windows";
+    public string PreferredOcrProvider => UseAiOcr && _aiOcrError == null ? "ai" : "windows";
 
     /// <summary>設定 (開発者向けの API の入・切など、窓の外から読む)。</summary>
     public AppSettings Settings => _settings;
@@ -120,7 +133,11 @@ public partial class TextWindow : Window
         _settings = settings;
         _ocrPane = new Pane(ResultBox, OcrPlaceholder);
         _translationPane = new Pane(TranslationBox, TranslationPlaceholder);
+        // 読み取りの画面を隠している・最小化している間は、画面に何も重ねない (遅れて届いた分も)
+        Overlay = new WindowsOverlayService(() => IsOcrVisible && WindowState != WindowState.Minimized);
         _ocrPane.Applied += RefreshSearch;
+        _ocrPane.Applied += () => { if (OcrNote.Text == HoldNote) OcrNote.Text = ""; };
+        _translationPane.Applied += () => { if (TranslationNote.Text == HoldNote) TranslationNote.Text = ""; };
         ResultBox.Loaded += (_, _) =>
         {
             // 検索で見つかった所の印 (原文の欄の上に重ねて描く)
@@ -162,21 +179,32 @@ public partial class TextWindow : Window
 
         _capture.PauseRequested += (_, _) => SetPaused(!_paused);
         _capture.CloseRequested += (_, _) => Close();
-        _capture.LocationChanged += (_, _) => { if (_settings.Follow) FollowCapture(); };
+        _capture.LocationChanged += (_, _) =>
+        {
+            if (_settings.Follow) FollowCapture();
+            ForgetReadPositions();
+        };
         _capture.SizeChanged += (_, _) =>
         {
             if (_settings.Follow) FollowCapture();
             _lastPixels = null; // サイズが変わったら次回は必ず再認識
+            ForgetReadPositions();
         };
         // 拡大率の違うモニターへ移った枠は、WPF の大きさ (DIP) は同じまま実際の大きさが変わる (SizeChanged が来ない)。
         // Windows が枠の大きさを変え終わってから隣に置き直す
         _capture.DpiChanged += (_, _) =>
         {
             if (_settings.Follow) Dispatcher.BeginInvoke(FollowCapture, DispatcherPriority.Background);
+            _lastPixels = null;
+            ForgetReadPositions();
         };
 
         StateChanged += (_, _) =>
+        {
             _capture.Visibility = WindowState == WindowState.Minimized ? Visibility.Hidden : Visibility.Visible;
+            if (WindowState == WindowState.Minimized) Overlay.ClearAll(); // (拡張機能が重ねた文字も消す)
+            else UpdateOverlay();
+        };
         Closing += OnClosing;
         SizeChanged += (_, _) => FitToolbar();
         Loaded += (_, _) => { FitToolbar(); UpdateSetupHint(); };
@@ -252,6 +280,14 @@ public partial class TextWindow : Window
         _lastOcrMs = 52;
         UpdateChips();
         StatusText.Text = $"{lines.Count} 行{GroupStatus}";
+    }
+
+    /// <summary>動作確認用: 訳を覚えさせ、読み取った範囲を決めて、訳を画面に重ねる (ShowDemoLines の後に)。</summary>
+    internal void ShowDemoOverlay(IEnumerable<(string Text, string Translation)> translations, Int32Rect readRect)
+    {
+        foreach (var (text, ja) in translations) _translator.AddCached(text, ja);
+        _readRect = readRect;
+        RenderTranslation();
     }
 
     /// <summary>見本の画面: 知らせの帯の状態 (loading = AI OCR の準備中、fallback = AI OCR を使えない、empty = 文字が見つからない、"" = 戻す)。</summary>
@@ -371,6 +407,7 @@ public partial class TextWindow : Window
                 _minutesWindow?.ApplyDisplaySetting(name);
                 break;
         }
+        UpdateOverlay(); // (翻訳・重ねる・文字変換を変えたとき)
         UpdateChips();
         _settings.Save();
     }
@@ -454,7 +491,8 @@ public partial class TextWindow : Window
             ? $"AI OCR (RapidOCR + PP-OCRv6)\n{(_aiOcr.Device switch { "gpu" => "GPU (DirectML / CUDA)", "cpu" => "CPU", _ => "準備中" })}\n確からしさ {_aiOcr.LastConfidence:P0}"
             : UseAiOcr ? "Windows OCR (AI OCR を準備中・使えないため)" : "Windows OCR (Windows の標準の文字認識)";
         bool local = _translator.Engine == TranslationEngine.Local;
-        TranslationChip.Text = local ? "翻訳: PC 内" : $"翻訳: {(_translator.Engine == TranslationEngine.DeepL ? "DeepL" : "Google")} (オンライン)";
+        TranslationChip.Text = (local ? "翻訳: PC 内" : $"翻訳: {(_translator.Engine == TranslationEngine.DeepL ? "DeepL" : "Google")} (オンライン)")
+                               + (OverlayOn ? " ・ 画面に重ねる" : "");
         TranslationPlaceIcon.Text = WindowsIcons.Glyph(local ? AppIcon.Local : AppIcon.Cloud);
         TranslationChipBorder.ToolTip = local
             ? $"{_translator.EngineName}\n文字は PC の外に送りません"
@@ -502,6 +540,7 @@ public partial class TextWindow : Window
     {
         _aiOcrError = null;
         _aiOcrReady = false;
+        _aiWarmup = null; // (前の準備が終わったままだと、準備をし直さずに読み取りが待たされる)
         _aiOcrFailures = 0;
         if (!UseAiOcr) _aiOcr.Release(); // Windows OCR にしたら AI OCR の補助プロセスを止める (メモリ・GPU を空ける。AI に戻したら起動し直す)
         if (UseAiOcr && !App.DemoMode)
@@ -552,10 +591,12 @@ public partial class TextWindow : Window
             return;
         }
         // (起動しただけで読み取りに使っていないとき (機能を選ぶ画面から議事録だけを使うなど) も止める)
-        if (UseAiOcr && _aiOcr.IsStarted && DateTime.Now - _lastActive > TimeSpan.FromMinutes(10))
+        // (Quick OCR・拡張機能が使っている間・使った直後は止めない)
+        if (UseAiOcr && _aiOcr.IsStarted && DateTime.Now - _lastActive > TimeSpan.FromMinutes(10) && _aiOcr.IdleFor > TimeSpan.FromMinutes(10))
         {
             _aiOcr.Release();
             _aiOcrReady = false;
+            _aiWarmup = null; // (次に読むときは裏で準備し直し、その間は Windows OCR で読む)
             UpdateChips();
         }
     }
@@ -574,6 +615,7 @@ public partial class TextWindow : Window
 
     private async Task RunOcrAsync(bool force)
     {
+        if (_busy && force) _lastPixels = null; // (読み取りの途中に押された: 終わったらすぐ読み直す)
         if (_busy || _ocrHidden || (_engine == null && !UseAiOcr)) return;
         if (_paused && !force) return;
         if (WindowState == WindowState.Minimized && !force) return;
@@ -582,6 +624,7 @@ public partial class TextWindow : Window
         _busy = true;
         try
         {
+            int moves = _frameMoves;
             var rect = _capture.GetCaptureRectPixels();
             if (rect.IsEmpty || rect.Width < 4 || rect.Height < 4) return;
 
@@ -611,6 +654,7 @@ public partial class TextWindow : Window
                     {
                         _lastLines = lines;
                         _lastFromAi = true;
+                        CommitReadRect(rect, moves);
                         UpdateDocument(fromNewFrame: true);
                         SetStatus($"高精度で読み直しました {swa.Elapsed.TotalSeconds:0.0} 秒 ・ {lines.Count} 行{AccumulateStatus}",
                             $"画面が止まったので、小さい・ぼやけた文字を高精度の認識モデル (PP-OCRv6 medium) で読み直しました (確からしさ {_aiOcr.LastConfidence:P0})");
@@ -662,6 +706,7 @@ public partial class TextWindow : Window
                     if (wasReady) AdjustInterval(sw.ElapsedMilliseconds);
                     await FindLayoutAsync(pixels, rect.Width, rect.Height);
                     _lastOcrMs = sw.ElapsedMilliseconds;
+                    CommitReadRect(rect, moves);
                     UpdateDocument(fromNewFrame: true);
                     UpdateChips();
                     SetStatus($"{_lastLines.Count} 行{GroupStatus}{AccumulateStatus}",
@@ -714,6 +759,7 @@ public partial class TextWindow : Window
             AdjustInterval(sw.ElapsedMilliseconds);
             await FindLayoutAsync(pixels, rect.Width, rect.Height);
             _lastOcrMs = sw.ElapsedMilliseconds;
+            CommitReadRect(rect, moves);
             UpdateDocument(fromNewFrame: true);
             UpdateChips();
 
@@ -777,13 +823,14 @@ public partial class TextWindow : Window
     private bool _lastFromAi;
 
     /// <param name="fromNewFrame">新しく読み取った画面なら true (蓄積モードで追記する)。</param>
-    private void UpdateDocument(bool fromNewFrame = false)
+    /// <param name="publish">拡張機能に渡す (蓄積を始めたときなど、同じ回をもう一度使うときは渡さない)。</param>
+    private void UpdateDocument(bool fromNewFrame = false, bool publish = true)
     {
         if (_lastLines == null) return;
         // 文脈補正は Windows OCR の癖に合わせたものなので AI OCR には使わない
         bool correct = !_lastFromAi && _settings.HighAccuracy;
         var frame = OcrDocument.From(_lastLines, _settings.JoinCjk, correct);
-        if (fromNewFrame && !App.DemoMode && PluginRuntime.HasOcrSubscribers) PublishToPlugins(frame);
+        if (fromNewFrame && publish && !App.DemoMode && PluginRuntime.HasOcrSubscribers) PublishToPlugins(frame);
         _grouping = OcrGrouping.None;
         if (Accumulating)
         {
@@ -802,19 +849,20 @@ public partial class TextWindow : Window
             _doc = frame;
         }
         bool hasKana = _doc.HasKana;
-        _units = _doc.ToTranslationUnits()
-            .Select(p => p.Select(u => (u, TextScript.Classify(u, hasKana))).ToList())
+        _units = _doc.TranslationUnits()
+            .Select(p => p.Select(u => (u, TextScript.Classify(u.Text, hasKana))).ToList())
             .ToList();
 
         RenderOcr();
         RenderTranslation();
         PumpTranslation();
+        UpdateCaptureHighlights();
     }
 
     /// <summary>読み取った 1 回分を、受け取る拡張機能に渡す (別のスレッドで。読み取りは待たない)。</summary>
     private void PublishToPlugins(OcrDocument frame)
     {
-        var r = _capture.GetCaptureRectPixels();
+        var r = _readRect; // (読み取ったときの範囲。途中で枠を動かしていたら空)
         if (r.IsEmpty) return;
         var source = WindowList.WindowAt(r.X + r.Width / 2, r.Y + r.Height / 2); // (読み取りの範囲の下のアプリ)
         PluginRuntime.PublishOcrFrame(PluginFrames.From(frame, (r.X, r.Y, r.Width, r.Height),
@@ -837,19 +885,21 @@ public partial class TextWindow : Window
                 : "読みたい文字の上に枠を重ねるか、枠を広げてください。小さな文字は枠を大きくすると読みやすくなります。";
         }
         bool applied = _ocrPane.Set(TextConverter.Apply(_doc.ToDisplayText(), _settings.Convert));
-        if (_aiOcrReady || !UseAiOcr) OcrNote.Text = applied ? "" : "選択中のため更新を保留中";
+        if (!applied) OcrNote.Text = HoldNote;
+        else if (OcrNote.Text == HoldNote || _aiOcrReady || !UseAiOcr) OcrNote.Text = "";
     }
 
     // ───────── 翻訳 ─────────
 
     private List<string> MissingForeignUnits() =>
         _units.SelectMany(p => p)
-            .Where(u => u.Kind == ScriptKind.Foreign && !_translator.TryGetCached(u.Text, out _))
-            .Select(u => u.Text)
+            .Where(u => u.Kind == ScriptKind.Foreign && !_translator.TryGetCached(u.Unit.Text, out _))
+            .Select(u => u.Unit.Text)
             .ToList();
 
     private void RenderTranslation()
     {
+        UpdateOverlay();
         if (!_settings.Translate) return;
 
         int foreign = 0, missing = 0;
@@ -857,15 +907,15 @@ public partial class TextWindow : Window
         foreach (var paragraph in _units)
         {
             var lines = new List<string>();
-            foreach (var (text, kind) in paragraph)
+            foreach (var (unit, kind) in paragraph)
             {
                 if (kind != ScriptKind.Foreign)
                 {
-                    lines.Add(text); // 日本語や数字だけの行はそのまま
+                    lines.Add(unit.Text); // 日本語や数字だけの行はそのまま
                     continue;
                 }
                 foreign++;
-                if (_translator.TryGetCached(text, out var translated)) lines.Add(translated);
+                if (_translator.TryGetCached(unit.Text, out var translated)) lines.Add(translated);
                 else { lines.Add("…"); missing++; }
             }
             paragraphs.Add(string.Join("\r\n", lines));
@@ -880,7 +930,7 @@ public partial class TextWindow : Window
         else
         {
             var text = TextConverter.Apply(string.Join("\r\n\r\n", paragraphs), _settings.Convert);
-            if (!_translationPane.Set(text)) note = "選択中のため更新を保留中";
+            if (!_translationPane.Set(text)) note = HoldNote;
             else if (missing > 0) note = "翻訳中…";
         }
         if (_translateError != null) note = _translateError;
@@ -975,6 +1025,72 @@ public partial class TextWindow : Window
         PumpTranslation();
     }
 
+    // ───────── 訳を画面に重ねる ─────────
+
+    /// <summary>訳を画面に重ねているか (翻訳がオンで、重ねる設定がオン)。</summary>
+    private bool OverlayOn => _settings.Translate && _settings.TranslationOverlay;
+
+    /// <summary>
+    /// 訳した文を、その文の行が画面で占める位置に重ねる (表示 → 訳を画面に重ねる)。訳は日本語訳の欄と同じもの (訳し直さない)。
+    /// 蓄積中 (画面の位置が無い)・隠している・最小化・枠を動かした直後は重ねない。
+    /// </summary>
+    private void UpdateOverlay()
+    {
+        if (!OverlayOn || Accumulating || _ocrHidden || WindowState == WindowState.Minimized || _readRect.IsEmpty)
+        {
+            Overlay.Clear(OverlayOwner);
+            return;
+        }
+        var labels = TranslationOverlay.Labels(_units.SelectMany(p => p),
+            text => _translator.TryGetCached(text, out var ja) ? TextConverter.Apply(ja, _settings.Convert) : null,
+            (_readRect.X, _readRect.Y));
+        Overlay.Show(OverlayOwner, labels);
+    }
+
+    /// <summary>枠を動かした・大きさを変えた: 読み取った位置は今の画面と合わないので、重ねた訳を消す (次に読み取ったら出し直す)。</summary>
+    private void ForgetReadPositions()
+    {
+        _frameMoves++;
+        _lastPixels = null; // (動かした先がたまたま同じ画像でも、読み直して位置を決め直す)
+        if (!_positionsStale)
+        {
+            _positionsStale = true;
+            _capture.SetHighlights([], -1); // (枠の上の検索の印も、読み直すまで消す)
+        }
+        if (_readRect.IsEmpty) return;
+        _readRect = Int32Rect.Empty;
+        UpdateOverlay();
+    }
+
+    /// <summary>読み取った範囲を、訳を重ねる位置の基準にする (読み取りの途中で枠を動かしていたら使わない)。</summary>
+    private void CommitReadRect(Int32Rect rect, int moves)
+    {
+        _positionsStale = moves != _frameMoves;
+        _readRect = _positionsStale ? Int32Rect.Empty : rect;
+    }
+
+    /// <summary>訳を画面に重ねる / やめる。重ねるときは翻訳もオンにする。</summary>
+    public void ToggleOverlay()
+    {
+        bool on = !OverlayOn;
+        bool turnedOnTranslation = on && !_settings.Translate;
+        _settings.TranslationOverlay = on;
+        if (turnedOnTranslation)
+        {
+            _settings.Translate = true;
+            OnSettingChanged(nameof(AppSettings.Translate));
+        }
+        OnSettingChanged(nameof(AppSettings.TranslationOverlay));
+        _settingsWindow?.LoadTranslation();
+        string engine = _translator.Engine == TranslationEngine.Local ? "PC 内の翻訳" : $"{_translator.EngineName} (オンライン。外国語の文をインターネットに送ります)";
+        SetStatus(!on ? "訳を画面に重ねるのをやめました"
+            : (turnedOnTranslation ? $"翻訳もオンにしました ({engine})。" : "")
+              + (Accumulating ? "訳を画面に重ねます (蓄積中は重ねません。蓄積を終えると重ねます)"
+                 : "訳を画面に重ねます (読み取りの枠の中の外国語の文に。クリックは下の窓に通ります)"));
+    }
+
+    private void OverlayItem_Click(object sender, RoutedEventArgs e) => ToggleOverlay();
+
     // ───────── 操作 ─────────
 
     private void SetStatus(string text, string? details = null)
@@ -1023,6 +1139,9 @@ public partial class TextWindow : Window
     public void TogglePause() => SetPaused(!_paused);
 
     public void ToggleAccumulate() => SetAccumulating(!_accumulating);
+
+    /// <summary>蓄積中か (蓄積中は上から順につなげるので、枠・まとまりごとにはできない)。</summary>
+    public bool IsAccumulating => _accumulating;
 
     public void CopyOriginal() => CopyText(ResultBox, "原文");
 
@@ -1081,7 +1200,29 @@ public partial class TextWindow : Window
         below.IsChecked = _settings.Layout == PaneLayout.Below;
         right.IsChecked = _settings.Layout == PaneLayout.Right;
         below.IsEnabled = right.IsEnabled = _settings.Translate;
+        MenuItemNamed("ViewMenu", "OverlayItem").IsChecked = OverlayOn;
         MenuItemNamed("ViewMenu", "AccumulateItem").IsChecked = _accumulating;
+        AddReadingFeatures((ContextMenu)Resources["ViewMenu"]);
+    }
+
+    /// <summary>
+    /// 読み取りの画面で使う拡張機能 (キーワードの見張り・読み取りの履歴など) を、表示メニューの終わりに切り替えとして出す
+    /// (開くたびに作り直す。押すと始める / 止める)。
+    /// </summary>
+    private static void AddReadingFeatures(ContextMenu menu)
+    {
+        foreach (var old in menu.Items.OfType<Control>().Where(i => Equals(i.Tag, "reading-feature")).ToList()) menu.Items.Remove(old);
+        var features = AppCommands.Features.Where(f => f.InReadingWindow).ToList();
+        if (features.Count == 0) return;
+        menu.Items.Add(new Separator { Tag = "reading-feature" });
+        foreach (var feature in features)
+        {
+            bool on = feature.Status().State != FeatureState.Closed;
+            var item = new MenuItem { Header = feature.Name, IsCheckable = true, IsChecked = on, ToolTip = feature.Description, Tag = "reading-feature" };
+            var f = feature;
+            item.Click += (_, _) => { if (on) f.Close?.Invoke(); else f.Open(); };
+            menu.Items.Add(item);
+        }
     }
 
     private void ViewText_Click(object sender, RoutedEventArgs e) => SetView(OcrView.Text);
@@ -1157,16 +1298,13 @@ public partial class TextWindow : Window
         ApplyOcrVisibility();
     }
 
-    /// <summary>読み取りの画面 (枠) を隠した・閉じた (画面に重ねた訳などを消す)。</summary>
-    public event Action? OcrHidden;
-
     /// <summary>読み取りの画面 (枠) が出ているか (隠れている間は、画面に文字を重ねない)。</summary>
     public bool IsOcrVisible => !_ocrClosed && !_hiddenForMinutes;
 
     private void ApplyOcrVisibility()
     {
         bool hidden = _ocrClosed || _hiddenForMinutes;
-        if (hidden) OcrHidden?.Invoke();
+        if (hidden) Overlay.ClearAll(); // (画面に重ねた訳・拡張機能の文字を消す)
         if (_ocrHidden != hidden && !_shutDown)
         {
             _ocrHidden = hidden;
@@ -1180,6 +1318,7 @@ public partial class TextWindow : Window
                 _capture.Show();
                 Show();
                 _lastPixels = null; // 戻したらすぐ読み直す
+                UpdateOverlay();
             }
         }
         FeaturesChanged?.Invoke();
@@ -1224,7 +1363,8 @@ public partial class TextWindow : Window
         _accumulating = on;
         _accumulator.Clear();
         AccumulateBar.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-        UpdateDocument(fromNewFrame: on); // 今の画面から集め始める
+        if (!on && _settings.OcrView == OcrView.Groups) _lastPixels = null; // (蓄積中は枠線を探していないので、すぐ読み直す)
+        UpdateDocument(fromNewFrame: on, publish: false); // 今の画面から集め始める (拡張機能にはもう渡してある)
         UpdateAccumulateBar();
         SetStatus(on ? "蓄積中: スクロールすると読んだ内容を重複なしで追記します" + AccumulateStatus : "蓄積を終了しました");
     }
@@ -1251,6 +1391,11 @@ public partial class TextWindow : Window
 
     private void CopyText(TextBox box, string name, bool all = false)
     {
+        if (box == TranslationBox && !_settings.Translate)
+        {
+            SetStatus("日本語訳はオフです (表示 ▾ または 設定 → 翻訳 でオンにできます)");
+            return;
+        }
         bool selection = !all && box.SelectionLength > 0;
         var text = selection ? box.SelectedText : box.Text;
         if (string.IsNullOrEmpty(text))
@@ -1490,7 +1635,7 @@ public partial class TextWindow : Window
     /// <summary>読み取り枠の上にも、見つかった所の印を付ける (今の一致は太い枠)。</summary>
     private void UpdateCaptureHighlights()
     {
-        if (_doc == null || _matches.Count == 0 || SearchBar.Visibility != Visibility.Visible || Accumulating)
+        if (_doc == null || _matches.Count == 0 || SearchBar.Visibility != Visibility.Visible || Accumulating || _positionsStale)
         {
             _capture.SetHighlights([], -1);
             return;
@@ -1594,10 +1739,14 @@ public partial class TextWindow : Window
         var failed = new List<string>();
         var actions = new Dictionary<string, Action>
         {
-            ["copy-ocr"] = () => { CopyText(ResultBox, "原文"); _capture.Flash(StatusText.Text); },
-            ["copy-translation"] = () => { CopyText(TranslationBox, "日本語訳"); _capture.Flash(StatusText.Text); },
-            ["refresh"] = () => _ = RunOcrAsync(force: true),
-            ["pause"] = () => SetPaused(!_paused),
+            ["copy-ocr"] = () => { if (OcrOpenFor("原文をコピー")) { CopyText(ResultBox, "原文"); _capture.Flash(StatusText.Text); } },
+            ["copy-translation"] = () => { if (OcrOpenFor("日本語訳をコピー")) { CopyText(TranslationBox, "日本語訳"); _capture.Flash(StatusText.Text); } },
+            ["refresh"] = () =>
+            {
+                if (_ocrHidden) OpenOcr(); // (閉じていれば開いて読む)
+                _ = RunOcrAsync(force: true);
+            },
+            ["pause"] = () => { if (OcrOpenFor("一時停止を切り替え")) SetPaused(!_paused); },
             ["quick-ocr"] = QuickOcr.Run,
         };
         foreach (var (id, _, _) in HotkeyText.Actions)
@@ -1613,6 +1762,15 @@ public partial class TextWindow : Window
         RefreshButton.ToolTip = $"枠の中を今すぐ読み取る (F5 ・ どこからでも {HotkeyText.For(_settings, "refresh")})";
         CopyOcrButton.ToolTip = $"コピー: 選択範囲があればその部分、なければ全文 (Ctrl+Shift+C ・ どこからでも {HotkeyText.For(_settings, "copy-ocr")})";
         CopyTranslationButton.ToolTip = $"コピー: 選択範囲があればその部分、なければ全文 (Ctrl+Shift+T ・ どこからでも {HotkeyText.For(_settings, "copy-translation")})";
+    }
+
+    /// <summary>どのアプリでも効くキー: 読み取りを閉じている間は、見えないまま動かさずに知らせる (開くボタンつき)。</summary>
+    private bool OcrOpenFor(string what)
+    {
+        if (!_ocrHidden) return true;
+        PluginToast.Show("GetText", new PluginNotification(new LocalizedText($"文字の読み取りを開いていないため、{what}できません"),
+            new LocalizedText("ホームの「文字の読み取り」で開くと使えます。"), PluginNotificationKind.Info, new LocalizedText("開く"), OpenOcr));
+        return false;
     }
 
     // ───────── ウィンドウ ─────────
@@ -1704,8 +1862,8 @@ public partial class TextWindow : Window
     private async void CloseAfterStopped(MinutesWindow minutes)
     {
         ClosingAfterStop = true;
-        minutes.SetStatus("記録の残り・プロジェクトの保存が終わったら GetText を終了します…");
-        await minutes.WaitPendingAsync();
+        minutes.SetStatus("記録を止めて、残りの音声を文字にしてから GetText を終了します…");
+        await minutes.StopForExitAsync();
         Close();
     }
 
@@ -1726,7 +1884,8 @@ public partial class TextWindow : Window
             return;
         }
         // 議事録の記録を止めて残りの音声を文字にしている途中なら、終わってから終了する (最後の発言を失わない)
-        if (!_sessionEnding && _minutesWindow is { HasPendingWork: true } stopping)
+        // (記録中のときも同じ: 止めて残りの音声を文字にし終えてから終える。すぐ終えると最後の発言が議事録に入らない)
+        if (!_sessionEnding && _minutesWindow is { } stopping && (stopping.HasPendingWork || stopping.IsRecording))
         {
             e.Cancel = true;
             CloseAfterStopped(stopping);
@@ -1735,6 +1894,7 @@ public partial class TextWindow : Window
         _shutDown = true;
         _timer.Stop();
         _translateCts.Cancel();
+        Overlay.ClearAll();
         _hotkeys?.Dispose();
         _minutesWindow?.ShutdownNow();
         _translator.Shutdown();

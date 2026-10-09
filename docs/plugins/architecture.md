@@ -52,7 +52,7 @@ Windows 版と Mac 版は同じ `PluginHost` のファイルを使います (Mac
 
 | 拡張機能が渡すもの | GetText が描く場所 |
 | --- | --- |
-| `PluginFeature` | ホームのタイル (状態の印・閉じる) |
+| `PluginFeature` | ホームのタイル (状態の印・閉じる)。`Placement = ReadingWindow` なら読み取りの画面の 表示 ▾ の切り替え |
 | `PluginCommand` | コマンドの一覧 (Ctrl+K / ⌘K)。分類は「拡張機能」、id は `plugin:<拡張機能の id>:<コマンドの id>` |
 | `PluginSettingsPage` | 設定 → 拡張機能 の各行の「設定」(切り替え・文字・数・選択) |
 | `PluginNotification` | 画面の右下の知らせ (アイコン・色はデザイントークン) |

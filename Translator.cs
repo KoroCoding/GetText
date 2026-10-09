@@ -92,6 +92,9 @@ public sealed class Translator
 
     public bool TryGetCached(string text, out string translated) => _cache.TryGetValue(Key(text), out translated!);
 
+    /// <summary>動作確認用: 訳を覚えさせる。</summary>
+    internal void AddCached(string text, string translated) => _cache[Key(text)] = translated;
+
     /// <summary>キャッシュにない文だけを翻訳してキャッシュに入れる。</summary>
     public async Task TranslateMissingAsync(IEnumerable<string> texts, CancellationToken ct)
     {
