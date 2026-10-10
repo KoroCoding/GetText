@@ -1,0 +1,26 @@
+== 補助プログラム (Swift) をビルドしています
+/Users/runner/work/GetText/GetText/mac/helper/GetTextHelper.swift:1111:75: warning: 'isPlayable' was deprecated in macOS 13.0: Use load(.isPlayable) instead
+1109 | func play(path: String, from: Double, until: Double) throws {
+1110 |     if !FileManager.default.fileExists(atPath: path) { throw HelperError("ファイルが見つかりません: \(path)") }
+1111 |     if playerPath != path && !AVURLAsset(url: URL(fileURLWithPath: path)).isPlayable {
+     |                                                                           `- warning: 'isPlayable' was deprecated in macOS 13.0: Use load(.isPlayable) instead
+1112 |         throw HelperError("この形式のファイルは Mac で再生できません (mkv・webm など)")
+1113 |     }
+== アプリ (C# / Avalonia) をビルドしています (x64)
+/Users/runner/work/GetText/GetText/AppSettings.cs(167,107): warning CA1416: This call site is reachable on all platforms. 'DataProtectionScope.CurrentUser' is only supported on: 'windows'. (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1416) [/Users/runner/work/GetText/GetText/mac/GetText.Mac.csproj]
+/Users/runner/work/GetText/GetText/AppSettings.cs(167,25): warning CA1416: This call site is reachable on all platforms. 'ProtectedData.Unprotect(byte[], byte[]?, DataProtectionScope)' is only supported on: 'windows'. (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1416) [/Users/runner/work/GetText/GetText/mac/GetText.Mac.csproj]
+/Users/runner/work/GetText/GetText/AppSettings.cs(187,45): warning CA1416: This call site is reachable on all platforms. 'ProtectedData.Protect(byte[], byte[]?, DataProtectionScope)' is only supported on: 'windows'. (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1416) [/Users/runner/work/GetText/GetText/mac/GetText.Mac.csproj]
+/Users/runner/work/GetText/GetText/AppSettings.cs(187,109): warning CA1416: This call site is reachable on all platforms. 'DataProtectionScope.CurrentUser' is only supported on: 'windows'. (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1416) [/Users/runner/work/GetText/GetText/mac/GetText.Mac.csproj]
+/Users/runner/work/GetText/GetText/mac/SettingsWindow.axaml.cs(641,13): warning CA1416: This call site is reachable on all platforms. 'File.SetUnixFileMode(string, UnixFileMode)' is unsupported on: 'windows'. (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1416) [/Users/runner/work/GetText/GetText/mac/GetText.Mac.csproj]
+== 同梱の拡張機能を作っています
+  gettext.barcode-1.0.0.gtplugin  254 KB  sha256 e05e5f453f088e751a83c6dda27e71d56c23594c620d8f4c5b8b340b8998bb46
+  gettext.document-ocr-1.0.0.gtplugin  31 KB  sha256 907c47b30445d7658cda6b4fa325b46c7021fe661484a65a999bb7c025899174
+  gettext.history-1.0.0.gtplugin  28 KB  sha256 c4ec6864006000923f96b33983ebf9c6f352a197fbd96a2f0a41d7c1f9b12e6d
+  gettext.keyword-monitor-1.0.0.gtplugin  24 KB  sha256 153ed538265cc1ef3fbdb61b6c6872911435c05ce305d11f6c30bf9f2fb83f44
+  gettext.presentation-1.0.0.gtplugin  37 KB  sha256 ec19e21c395073909c4f59fd8423afcbdc4c7d9d638d6502b9d75ba9a65454ad
+拡張機能 5 個 → /Users/runner/work/GetText/GetText/out-x64/GetText.app/Contents/Resources/bundled-plugins
+== アイコンを作っています
+== 署名しています (ad-hoc)
+/Users/runner/work/GetText/GetText/out-x64/GetText.app: replacing existing signature
+完成: /Users/runner/work/GetText/GetText/out-x64/GetText.app
+      /Users/runner/work/GetText/GetText/out-x64/GetText-mac-x64.zip ( 45M)

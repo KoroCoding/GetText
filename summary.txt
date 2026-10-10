@@ -1,0 +1,12 @@
+GetText Mac f23d512d85af28d340202b83778b00f09f75760b 2026-10-10 22:47
+build_arm64: success
+build_x64: success
+helper: success
+ui: success
+snapshots: success
+smoke: success
+x64_run: success
+setup: skipped
+minutes: skipped
+burn: skipped
+capture: skipped

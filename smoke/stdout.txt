@@ -1,0 +1,104 @@
+Error compiling MSL shader: #include <metal_stdlib>
+#include <simd/simd.h>
+using namespace metal;
+struct Inputs {
+    float4 radii_selector  [[attribute(0)]];
+    float4 corner_and_radius_outsets  [[attribute(1)]];
+    float4 aa_bloat_and_coverage  [[attribute(2)]];
+    float4 skew  [[attribute(3)]];
+    float2 translate  [[attribute(4)]];
+    float4 radii_x  [[attribute(5)]];
+    float4 radii_y  [[attribute(6)]];
+    float4 color  [[attribute(7)]];
+};
+struct Outputs {
+    float4 sk_Position [[position]];
+    float4 vcolor_Stage0  [[user(locn0)]];
+    float2 varccoord_Stage0  [[user(locn1)]];
+    float sk_PointSize [[point_size]];
+};
+struct uniformBuffer {
+    float4 sk_RTAdjust;
+};
+struct Globals {
+    constant uniformBuffer* _anonInterface0;
+};
+
+
+
+
+
+
+
+
+
+vertex Outputs vertexMain(Inputs _in [[stage_in]], constant uniformBuffer& _anonInterface0 [[buffer(0)]], uint sk_VertexID [[vertex_id]], uint sk_InstanceID [[instance_id]]) {
+    Globals globalStruct{&_anonInterface0};
+    thread Globals* _globals = &globalStruct;
+    (void)_globals;
+    Outputs _outputStruct;
+    thread Outputs* _out = &_outputStruct;
+    _out->vcolor_Stage0 = _in.color;
+    float2 corner = _in.corner_and_radius_outsets.xy;
+    float2 radius_outset = _in.corner_and_radius_outsets.zw;
+    float2 aa_bloat_direction = _in.aa_bloat_and_coverage.xy;
+    float coverage = _in.aa_bloat_and_coverage.z;
+    float is_linear_coverage = _in.aa_bloat_and_coverage.w;
+    float2 pixellength = rsqrt(float2(dot(_in.skew.xz, _in.skew.xz), dot(_in.skew.yw, _in.skew.yw)));
+    float4 normalized_axis_dirs = _in.skew * pixellength.xyxy;
+    float2 axiswidths = abs(normalized_axis_dirs.xy) + abs(normalized_axis_dirs.zw);
+    float2 aa_bloatradius = (axiswidths * pixellength) * 0.5;
+    float4 radii_and_neighbors = _in.radii_selector * float4x4(_in.radii_x, _in.radii_y, _in.radii_x.yxwz, _in.radii_y.wzyx);
+    float2 radii = radii_and_neighbors.xy;
+    float2 neighbor_radii = radii_and_neighbors.zw;
+    if (any(aa_bloatradius > float2(1.0))) {
+        corner = max(abs(corner), aa_bloatradius) * sign(corner);
+        coverage /= max(aa_bloatradius.x, 1.0) * max(aa_bloatradius.y, 1.0);
+        radii = float2(0.0);
+    }
+    if (any(radii < aa_bloatradius * 1.25)) {
+        radii = aa_bloatradius;
+        radius_outset = floor(abs(radius_outset)) * radius_outset;
+        is_linear_coverage = 1.0;
+    } else {
+        radii = clamp(radii, pixellength, 2.0 - pixellength);
+        neighbor_radii = clamp(neighbor_radii, pixellength, 2.0 - pixellength);
+        float2 spacing = (2.0 - radii) - neighbor_radii;
+        float2 extra_pad = max(pixellength * 0.0625 - spacing, float2(0.0));
+        radii -= extra_pad * 0.5;
+    }
+    float2 aa_outset = aa_bloat_direction * aa_bloatradius;
+    float2 vertexpos = (corner + radius_outset * radii) + aa_outset;
+    float2x2 skewmatrix = float2x2(_in.skew.xy, _in.skew.zw);
+    float2 devcoord = vertexpos * skewmatrix + _in.translate;
+    if (0.0 != is_linear_coverage) {
+        _out->varccoord_Stage0.xy = float2(0.0, coverage);
+    } else {
+        float2 arccoord = (1.0 - abs(radius_outset)) + (aa_outset / radii) * corner;
+        _out->varccoord_Stage0.xy = float2(arccoord.x + 1.0, arccoord.y);
+    }
+    _out->sk_Position = float4(devcoord.x, devcoord.y, 0.0, 1.0);
+    _out->sk_Position = float4(_out->sk_Position.xy * _globals->_anonInterface0->sk_RTAdjust.xz + _out->sk_Position.ww * _globals->_anonInterface0->sk_RTAdjust.yw, 0.0, _out->sk_Position.w);
+    _out->sk_Position.y = -_out->sk_Position.y;
+    return *_out;
+}
+
+Error Domain=org.skia.ganesh Code=1 "Compilation took longer than 300 ms" UserInfo={NSLocalizedDescription=Compilation took longer than 300 ms}
+実際の画面での起動の確認 ・ すべて合格
+OK  読み取りの画面を開く (480×600、拡大率 1)
+OK  読み取りの画面を描く
+OK  読み取り枠を開く
+OK  読み取り枠を描く
+OK  枠の窓の番号を調べる (25)
+OK  枠の中を読み取る (状態: 0 行)
+OK  議事録の画面を開く
+OK  議事録の画面を描く
+OK  設定の画面を開く
+OK  設定の画面を描く
+OK  アプリから補助プログラムを使う (macOS 15.7.9)
+--  許可: 画面収録 あり ・ マイク granted
+OK  録画するものの一覧 (ウィンドウ 0 個・画面 1 個)
+OK  録画のプレビューを作る (640×480・17 KB)
+OK  画面の録画を始める (1024×768)
+OK  画面の録画を止めて書き終える (止めた時刻まで入る) (3.3 秒・41 KB)
+
