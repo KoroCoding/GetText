@@ -5,7 +5,7 @@ name: Mac
 
 on:
   push:
-    branches: [main, plugin-platform-rc]
+    branches: [main, plugin-platform-rc, next-gen]
     tags: ['v*']
   workflow_dispatch:
     inputs:
@@ -14,6 +14,7 @@ on:
         type: boolean
         default: false
 
+# 結果を ci/mac-results ブランチに置く・タグのときは Releases に置くため、書き込める (このワークフローのジョブは 1 つ)
 permissions:
   contents: write
 
@@ -32,9 +33,11 @@ jobs:
       # 手動で full をオンにしたとき、またはコミットのメッセージに [mac-full] があるときは、議事録の通しの確認もする
       FULL: ${{ inputs.full || contains(github.event.head_commit.message, '[mac-full]') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: '9.0.x'
 
@@ -109,14 +112,14 @@ jobs:
             echo "Rosetta が無いので Intel 版は起動していません" > results/ui_x64.txt
           fi
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         if: env.FULL == 'true'
         with:
           python-version: '3.11'
 
       - name: モデルのキャッシュ
         if: env.FULL == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/Library/Application Support/offline/models
           key: gettext-models-${{ hashFiles('offline/download_models.py') }}

@@ -6,14 +6,14 @@ name: Windows
 
 on:
   push:
-    branches: [main, plugin-platform-rc]
+    branches: [main, plugin-platform-rc, next-gen]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
 
+# 既定は読むだけ。Releases に置くジョブ (タグのとき) だけ書き込める
 permissions:
-  contents: write
-  actions: read
+  contents: read
 
 concurrency:
   group: windows-${{ github.ref }}
@@ -22,14 +22,19 @@ concurrency:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: read # (SignPath が成果物を読む)
     timeout-minutes: 60
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_NOLOGO: '1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: '9.0.x'
 
@@ -61,7 +66,7 @@ jobs:
 
       - name: 画面の画像を残す
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: GetText-windows-screens
           path: screens
@@ -93,7 +98,7 @@ jobs:
 
       - name: 署名する前のファイルを残す
         id: unsigned
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: GetText-windows-x64-unsigned
           path: package/GetText
@@ -101,7 +106,7 @@ jobs:
       - name: SignPath で署名する
         id: sign
         if: vars.SIGNPATH_ORGANIZATION_ID != '' && github.event_name != 'pull_request'
-        uses: signpath/github-action-submit-signing-request@v1
+        uses: signpath/github-action-submit-signing-request@ced31329c0317e779dad2eec2a7c3bb46ea1343e # v1
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -121,15 +126,26 @@ jobs:
           (Get-AuthenticodeSignature signed/GetText/GetText.exe) | Format-List Status, SignerCertificate
 
       - name: 配布用の ZIP を残す
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: GetText-windows-x64
           path: GetText-windows-x64.zip
 
-      - name: Releases に置く (タグのとき)
-        if: startsWith(github.ref, 'refs/tags/')
+  # Releases に置く (タグのときだけ。書き込みの権限はこのジョブだけ)
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: GetText-windows-x64
+      - name: Releases に置く
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "GetText $GITHUB_REF_NAME" --notes "README の「別の PC で使う」「Mac で使う」を参照してください。" || true
