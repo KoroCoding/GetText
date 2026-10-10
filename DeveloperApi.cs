@@ -281,6 +281,7 @@ public sealed class DeveloperApiServer : IDisposable
         if (_host.Ocr == null || _host.Documents == null) throw new InvalidOperationException("読み取りの準備ができていません");
         var body = JsonNode.Parse(request.Body) ?? throw new FormatException("本文は JSON にしてください");
         var path = body["path"]?.GetValue<string>() ?? throw new FormatException("path (画像のファイル) を指定してください");
+        if (!IsAllowedImagePath(path)) throw new ArgumentException("path は、この PC の中の画像のファイル (png・jpg・bmp・gif・tif・webp) をフォルダから書いてください");
         var image = await _host.Documents.LoadImageAsync(path, 4000, ct);
         var result = await _host.Ocr.RecognizeAsync(image.Bgra, image.Width, image.Height, body["provider"]?.GetValue<string>(), ct);
         return new JsonObject
@@ -295,6 +296,19 @@ public sealed class DeveloperApiServer : IDisposable
                 ["box"] = new JsonArray(Math.Round(l.Left, 1), Math.Round(l.Top, 1), Math.Round(l.Right, 1), Math.Round(l.Bottom, 1)),
             }).ToArray()),
         };
+    }
+
+    private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".webp" };
+
+    /// <summary>
+    /// 読ませてよい場所か: この PC の中のフォルダから書いた画像のファイルだけ。ネットワークの場所 (\\サーバー\…) は断る
+    /// (Windows がその相手に自動でサインインを試み、資格情報の一部が送られうるため)。デバイスの名前 (\\.\・\\?\) も断る。
+    /// </summary>
+    internal static bool IsAllowedImagePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || path.Contains('\0') || !Path.IsPathFullyQualified(path)) return false;
+        if (path.StartsWith(@"\\", StringComparison.Ordinal) || path.StartsWith("//", StringComparison.Ordinal)) return false;
+        return ImageExtensions.Contains(Path.GetExtension(path));
     }
 
     private async Task<JsonNode> TranslateAsync(Request request, CancellationToken ct)

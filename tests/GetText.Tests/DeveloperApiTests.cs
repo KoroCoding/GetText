@@ -130,7 +130,24 @@ public class DeveloperApiTests : IDisposable
         var (missing, error) = await Send(Request(HttpMethod.Post, "/v1/ocr", json: new JsonObject { ["path"] = Path.Combine(_dir, "none.png") }.ToJsonString()));
         Assert.Equal(HttpStatusCode.BadRequest, missing);
         Assert.Contains("ファイルがありません", error!["error"]!.GetValue<string>());
+
+        // ネットワークの場所は読ませない (Windows がその相手に自動でサインインを試みるため)。画像でないファイルも
+        var (unc, uncError) = await Send(Request(HttpMethod.Post, "/v1/ocr", json: new JsonObject { ["path"] = @"\\server\share\a.png" }.ToJsonString()));
+        Assert.Equal(HttpStatusCode.BadRequest, unc);
+        Assert.Contains("この PC の中の画像", uncError!["error"]!.GetValue<string>());
     }
+
+    [Theory]
+    [InlineData(@"C:\pictures\scan.png", true)]
+    [InlineData(@"D:\a\b.JPG", true)]
+    [InlineData(@"\\server\share\scan.png", false)]   // ネットワークの場所
+    [InlineData(@"\\?\C:\scan.png", false)]           // デバイスの名前
+    [InlineData(@"\\.\pipe\scan.png", false)]
+    [InlineData("//server/share/scan.png", false)]
+    [InlineData("scan.png", false)]                        // フォルダから書いていない
+    [InlineData(@"C:\notes\secret.txt", false)]         // 画像でない
+    [InlineData("", false)]
+    public void OnlyLocalImageFilesCanBeRead(string path, bool allowed) => Assert.Equal(allowed, DeveloperApiServer.IsAllowedImagePath(path));
 
     [Fact]
     public async Task UnknownPathsAndMethods()
