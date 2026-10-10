@@ -15,3 +15,6 @@ tools/voicevox/
 # 新しいリポジトリ (GetText だけ) の GitHub Actions の結果などを手元に取ったとき
 /GetText-windows-x64.zip
 *.py[cod]
+
+# 公開しない監査の詳細 (手元だけ)
+.local-audit/
