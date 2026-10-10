@@ -144,6 +144,12 @@ public class DeveloperApiTests : IDisposable
     [InlineData(@"\\?\C:\scan.png", false)]           // デバイスの名前
     [InlineData(@"\\.\pipe\scan.png", false)]
     [InlineData("//server/share/scan.png", false)]
+    [InlineData(@"\/server/share/scan.png", false)]        // 区切りを混ぜた UNC
+    [InlineData(@"/\server\share\scan.png", false)]
+    [InlineData(@"\??\UNC\server\share\scan.png", false)]
+    [InlineData(@"C:\notes\secret.txt:hidden.png", false)] // 別のデータの流れ
+    [InlineData(@"C:\x\CON.png", false)]                  // 装置の名前
+    [InlineData(@"C:\x\com1.jpg", false)]
     [InlineData("scan.png", false)]                        // フォルダから書いていない
     [InlineData(@"C:\notes\secret.txt", false)]         // 画像でない
     [InlineData("", false)]

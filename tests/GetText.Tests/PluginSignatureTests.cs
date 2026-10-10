@@ -139,6 +139,41 @@ public class PluginSignatureTests : IDisposable
     }
 
     [Fact]
+    public void OldRecordsTrustedWithoutSignatureAreDowngraded()
+    {
+        // 前の版は、オンラインの一覧の SHA-256・verified だけで公式・確認済みにしていた。署名で確かめていないものはコミュニティに戻す
+        var root = Path.Combine(_dir, "old");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, "plugin-state.json"), """
+            { "Schema": 1, "Plugins": [
+              { "Id": "gettext.online", "Version": "1.0.0", "Enabled": true, "Trust": "Official", "Source": "Index" },
+              { "Id": "acme.listed", "Version": "1.0.0", "Enabled": true, "Trust": "Verified", "Source": "Index" },
+              { "Id": "gettext.bundled", "Version": "1.0.0", "Enabled": true, "Trust": "Official", "Source": "Bundled" },
+              { "Id": "gettext.signed", "Version": "1.0.0", "Enabled": true, "Trust": "Official", "Source": "Index", "SignedBy": "test-official" }
+            ] }
+            """);
+        var store = new PluginStore(root);
+        Assert.Equal(PluginTrust.Community, store.Find("gettext.online")!.Trust);
+        Assert.Equal(PluginTrust.Community, store.Find("acme.listed")!.Trust);
+        Assert.Equal(PluginTrust.Official, store.Find("gettext.bundled")!.Trust);
+        Assert.Equal(PluginTrust.Official, store.Find("gettext.signed")!.Trust);
+    }
+
+    [Fact]
+    public void InstallReadsThePackageOnceAndLeavesNoCopy()
+    {
+        // 確かめた物と入れる物を同じにするため、パッケージの写しで確かめて入れる。写しは後に残さない
+        var package = Package("gettext.copied");
+        PluginSignatures.Sign(package, "test-official", _official.Private);
+        var store = Store();
+        store.InstallFromFile(package, null, PluginTrust.Community, PluginSource.LocalFile, hostVersion: Host);
+        Assert.Equal(PluginTrust.Official, store.Find("gettext.copied")!.Trust);
+        var staging = Path.Combine(store.Root, ".staging");
+        Assert.True(!Directory.Exists(staging) || !Directory.EnumerateFiles(staging, "*.gtplugin").Any());
+        Assert.True(File.Exists(package)); // (元のファイルはそのまま)
+    }
+
+    [Fact]
     public void MalformedSignatureIsRejected()
     {
         var package = Package("gettext.malformed");
