@@ -262,7 +262,8 @@ public class PluginPlatformTests : IDisposable
         var m = store.InstallFromFile(pkg, sha, PluginTrust.Official, PluginSource.Index, "gettext.sample", new SemVersion(1, 0, 0), Host);
         Assert.Equal("gettext.sample", m.Id);
         var record = Assert.Single(store.Records);
-        Assert.Equal(PluginTrust.Official, record.Trust);
+        // オンラインの一覧の SHA-256 と一致しても、署名が無ければ発行元は確かめていない (PluginSignatureTests)
+        Assert.Equal(PluginTrust.Community, record.Trust);
         Assert.True(File.Exists(Path.Combine(store.VersionDirectory("gettext.sample", "1.0.0"), "plugin.json")));
         Assert.False(Directory.Exists(Path.Combine(store.Root, ".staging")) && Directory.EnumerateFileSystemEntries(Path.Combine(store.Root, ".staging")).Any());
         // 同じ版をもう一度

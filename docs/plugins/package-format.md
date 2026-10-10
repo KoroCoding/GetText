@@ -100,7 +100,7 @@ GitHub Releases に置く一覧 (専用のサーバーはありません)。同�
       "sha256": "…64 桁…", "size": 12345, "installedSize": 40000,
       "platforms": ["any"], "minHostVersion": "1.1.0", "apiVersion": 1,
       "permissions": ["screen-text", "notifications"], "models": [], "license": "GPL-3.0-or-later",
-      "icon": "Search", "verified": true, "local": true
+      "icon": "Search", "signed": true, "local": true
     }
   ]
 }

@@ -8,11 +8,11 @@ namespace GetText;
 /// <summary>拡張機能をどこまで信頼できるか (画面に出す)。同じプロセスで動くので、どれも GetText と同じ権限を持つ。</summary>
 public enum PluginTrust
 {
-    /// <summary>GetText の開発元が作り、配布の索引の SHA-256 と一致したもの。</summary>
+    /// <summary>GetText の開発元の鍵で署名を確かめたもの、または GetText の配布物に同梱された公式のもの (同梱の索引の SHA-256 と一致)。</summary>
     Official,
-    /// <summary>索引で確かめた (verified) と書かれたもの。</summary>
+    /// <summary>GetText が信頼する発行元の鍵で署名を確かめたもの。</summary>
     Verified,
-    /// <summary>それ以外 (ファイルから入れたものなど)。</summary>
+    /// <summary>それ以外 (署名の無いもの・知らない鍵のもの・ファイルから入れたものなど)。</summary>
     Community,
 }
 
@@ -42,6 +42,8 @@ public sealed class PluginRecord
     public PluginTrust Trust { get; set; } = PluginTrust.Community;
     public PluginSource Source { get; set; } = PluginSource.LocalFile;
     public string? Sha256 { get; set; }
+    /// <summary>署名を確かめた鍵 (無ければ null)。</summary>
+    public string? SignedBy { get; set; }
     public DateTimeOffset InstalledAt { get; set; }
     /// <summary>最後の問題 (利用者に見せる。個人のデータは入れない)。</summary>
     public string? LastError { get; set; }
@@ -107,7 +109,7 @@ public sealed class PluginStore
     private static PluginRecord Clone(PluginRecord r) => new()
     {
         Id = r.Id, Version = r.Version, PendingVersion = r.PendingVersion, PreviousVersion = r.PreviousVersion, Enabled = r.Enabled,
-        PendingRemoval = r.PendingRemoval, Trust = r.Trust, Source = r.Source, Sha256 = r.Sha256, InstalledAt = r.InstalledAt, LastError = r.LastError,
+        PendingRemoval = r.PendingRemoval, Trust = r.Trust, Source = r.Source, Sha256 = r.Sha256, SignedBy = r.SignedBy, InstalledAt = r.InstalledAt, LastError = r.LastError,
     };
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, Converters = { new JsonStringEnumConverter() } };
@@ -348,11 +350,9 @@ public sealed class PluginStore
                 throw new PluginPackageException($"パッケージの版 ({manifest.Version}) が索引 ({expectedVersion}) と違います");
             if (PluginCompatibility.Check(manifest, hostVersion ?? PluginCompatibility.HostVersion, platform ?? PluginCompatibility.CurrentPlatform) is { } why)
                 throw new PluginPackageException(why);
+            (trust, string? signedBy) = TrustFromSignature(package, manifest.Id, trust, source, expectedSha256);
             if (manifest.EntryPoint is { } entry && !File.Exists(Path.Combine(work, entry.Assembly)))
                 throw new PluginPackageException($"パッケージに {entry.Assembly} がありません");
-            // 公式を名乗れるのは、GetText の開発元の id で、公式の索引・同梱のもので SHA-256 を確かめたものだけ
-            if (trust == PluginTrust.Official && !(manifest.Id.StartsWith("gettext.", StringComparison.Ordinal) && expectedSha256 != null))
-                trust = PluginTrust.Community;
 
             var target = VersionDirectory(manifest.Id, manifest.Version.ToString());
             lock (_lock)
@@ -367,6 +367,7 @@ public sealed class PluginStore
                     existing.Trust = trust;
                     existing.Source = source;
                     existing.Sha256 = sha;
+                        existing.SignedBy = signedBy;
                     existing.LastError = null;
                 }
                 else
@@ -383,7 +384,7 @@ public sealed class PluginStore
                     {
                         State.Plugins.Add(new PluginRecord
                         {
-                            Id = manifest.Id, Version = manifest.Version.ToString(), Enabled = true, Trust = trust, Source = source, Sha256 = sha,
+                            Id = manifest.Id, Version = manifest.Version.ToString(), Enabled = true, Trust = trust, Source = source, Sha256 = sha, SignedBy = signedBy,
                             InstalledAt = DateTimeOffset.Now,
                         });
                     }
@@ -396,6 +397,7 @@ public sealed class PluginStore
                         existing.Trust = trust;
                         existing.Source = source;
                         existing.Sha256 = sha;
+                        existing.SignedBy = signedBy;
                         existing.LastError = null;
                     }
                     else
@@ -407,6 +409,7 @@ public sealed class PluginStore
                         existing.Trust = trust;
                         existing.Source = source;
                         existing.Sha256 = sha;
+                        existing.SignedBy = signedBy;
                         existing.LastError = null;
                     }
                 }
@@ -427,6 +430,23 @@ public sealed class PluginStore
     /// <summary>
     /// 索引の URL からダウンロードして入れる。https だけ。大きさの上限を超えたら止める。SHA-256 は必ず確かめる。
     /// </summary>
+    /// <summary>
+    /// 信頼を決める。署名が正しくなければ入れない。信頼する鍵で確かめたら、その鍵の信頼 (公式 / 確認済み)。
+    /// 署名が無い・鍵を信頼していないときは、GetText に同梱の公式のもの (同梱の索引の SHA-256 と一致) だけ公式、ほかはコミュニティ
+    /// (SHA-256 は「一覧と同じファイル」を確かめるだけで、発行元までは確かめられないため)。
+    /// </summary>
+    private static (PluginTrust Trust, string? SignedBy) TrustFromSignature(string package, string id, PluginTrust requested, PluginSource source, string? expectedSha256)
+    {
+        var result = PluginSignatures.Verify(package, id);
+        if (result.State == PluginSignatureState.Invalid)
+            throw new PluginPackageException("拡張機能の署名が正しくありません (" + result.Reason + ")。入れませんでした");
+        if (result is { State: PluginSignatureState.Valid, Key: { } key })
+            return (key.Trust, key.KeyId);
+        bool bundledOfficial = requested == PluginTrust.Official && source == PluginSource.Bundled && expectedSha256 != null
+                               && id.StartsWith("gettext.", StringComparison.Ordinal);
+        return (bundledOfficial ? PluginTrust.Official : PluginTrust.Community, null);
+    }
+
     public async Task<PluginManifest> InstallFromUrlAsync(HttpClient http, Uri url, string sha256, long expectedSize, PluginTrust trust,
         string expectedId, SemVersion expectedVersion, IProgress<double>? progress, CancellationToken ct)
     {

@@ -364,7 +364,11 @@ public sealed class PluginCatalog(PluginStore store, Func<IReadOnlyList<LoadedPl
     // ───────── 補助 ─────────
 
     /// <summary>索引の項目の信頼 (公式は GetText の開発元の id と発行元のもの。確かめたものは索引の verified)。</summary>
-    public static PluginTrust TrustOf(PluginIndexEntry e) => e.IsOfficial ? PluginTrust.Official : e.Verified ? PluginTrust.Verified : PluginTrust.Community;
+    /// <summary>
+    /// 入れる前に見せる信頼: GetText に同梱の公式のものだけ公式。オンラインの一覧のものは、一覧の文 (公式・verified) だけでは
+    /// 発行元を確かめられないのでコミュニティとして見せ、入れるときに署名を確かめて決める。
+    /// </summary>
+    public static PluginTrust TrustOf(PluginIndexEntry e) => e.IsOfficial && e.BundledFile != null ? PluginTrust.Official : PluginTrust.Community;
 
     public static string TrustLabel(PluginTrust trust) => trust switch
     {
@@ -490,9 +494,9 @@ public static class PluginTexts
         lines.AddRange(Chips(item).Select(p => $"・{p.Label}: {p.Description}"));
         lines.Add(item.Trust switch
         {
-            PluginTrust.Official => "公式: GetText の開発元が作り、配布の一覧の SHA-256 と一致したものです。",
-            PluginTrust.Verified => "確認済み: 拡張機能の一覧で確認済みとされたものです。",
-            _ => "コミュニティ: GetText の開発元は確かめていません。",
+            PluginTrust.Official => "公式: GetText の開発元の鍵で署名を確かめたか、GetText に同梱されていたものです。",
+            PluginTrust.Verified => "確認済み: GetText が信頼する発行元の鍵で署名を確かめたものです。",
+            _ => "コミュニティ: 発行元を署名で確かめていません (署名が無い・知らない鍵)。入れる前に、信頼できる発行元か確かめてください。",
         });
         return string.Join("\n", lines);
     }

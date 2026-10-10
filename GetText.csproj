@@ -31,7 +31,7 @@
     <None Remove="mac\**" />
     <Page Remove="mac\**" />
     <!-- 拡張機能の契約 (sdk) と拡張機能 (plugins) は別のプロジェクト -->
-    <Compile Remove="sdk\**;plugins\**" />
+    <Compile Remove="sdk\**;plugins\**;tools\**" />
     <None Remove="sdk\**;plugins\**" />
     <Page Remove="sdk\**;plugins\**" />
     <!-- 開発の道具が作る作業用のコピー (.claude\worktrees など) は含めない (同じクラスが二重になってビルドできなくなる) -->

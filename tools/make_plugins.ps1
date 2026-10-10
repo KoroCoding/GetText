@@ -55,6 +55,14 @@ foreach ($proj in Get-ChildItem (Join-Path $root "plugins") -Directory) {
     } finally {
         $zip.Dispose()
     }
+    # 署名 (開発元の秘密鍵が環境変数にあるときだけ。CI の Secrets。docs/security/PLUGIN_SIGNING.md)
+    $signed = $false
+    if ($env:GETTEXT_PLUGIN_SIGNING_KEY) {
+        $keyId = if ($env:GETTEXT_PLUGIN_SIGNING_KEY_ID) { $env:GETTEXT_PLUGIN_SIGNING_KEY_ID } else { "gettext-official-1" }
+        & dotnet run --project (Join-Path $root "tools\PluginSign\PluginSign.csproj") -c Release -- sign $package $keyId
+        if ($LASTEXITCODE -ne 0) { throw "署名できませんでした: $name" }
+        $signed = $true
+    }
 
     $installed = (Get-ChildItem $bin -File -Recurse | Measure-Object Length -Sum).Sum + (Get-Item $manifestPath).Length
     $sha = (Get-FileHash $package -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -63,7 +71,7 @@ foreach ($proj in Get-ChildItem (Join-Path $root "plugins") -Directory) {
         version = $manifest.version; file = $name; sha256 = $sha; size = (Get-Item $package).Length; installedSize = $installed
         platforms = $manifest.platforms; minHostVersion = $manifest.minHostVersion; apiVersion = $manifest.apiVersion
         permissions = $manifest.permissions; models = $manifest.models; license = $manifest.license
-        icon = $manifest.icon; verified = $true; local = -not ($manifest.permissions -contains "network")
+        icon = $manifest.icon; signed = $signed; local = -not ($manifest.permissions -contains "network")
     }
     if ($ReleaseTag) { $entry.url = "https://github.com/KoroCoding/GetText/releases/download/$ReleaseTag/$name" }
     $entries += [pscustomobject]$entry
