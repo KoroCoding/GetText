@@ -301,15 +301,49 @@ public sealed class DeveloperApiServer : IDisposable
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".webp" };
 
     /// <summary>
-    /// 読ませてよい場所か: この PC の中のフォルダから書いた画像のファイルだけ。ネットワークの場所 (\\サーバー\…) は断る
+    /// 読ませてよい場所か: この PC の中のフォルダから書いた画像のファイルだけ。ネットワークの場所 (\\サーバー\…・ネットワークのドライブ) は断る
     /// (Windows がその相手に自動でサインインを試み、資格情報の一部が送られうるため)。デバイスの名前 (\\.\・\\?\) も断る。
     /// </summary>
     internal static bool IsAllowedImagePath(string path)
     {
-        if (string.IsNullOrWhiteSpace(path) || path.Contains('\0') || !Path.IsPathFullyQualified(path)) return false;
-        if (path.StartsWith(@"\\", StringComparison.Ordinal) || path.StartsWith("//", StringComparison.Ordinal)) return false;
-        return ImageExtensions.Contains(Path.GetExtension(path));
+        if (string.IsNullOrWhiteSpace(path) || path.Contains('\0')) return false;
+        // 区切りが 2 つで始まる (\\・//・\/・/\)、\??\ で始まるものは、ネットワークの場所かデバイスの名前
+        if (path.Length >= 2 && IsSeparator(path[0]) && IsSeparator(path[1])) return false;
+        if (path.StartsWith(@"\??\", StringComparison.Ordinal) || !Path.IsPathFullyQualified(path)) return false;
+        string full;
+        try
+        {
+            full = Path.GetFullPath(path);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+        if (full.Length >= 2 && IsSeparator(full[0]) && IsSeparator(full[1])) return false;
+        if (OperatingSystem.IsWindows())
+        {
+            // 別のデータの流れ (a.txt:b.png)・装置の名前 (CON・COM1 など)・ネットワークのドライブ (Z: など) は断る
+            if (full.IndexOf(':', 2) >= 0) return false;
+            if (ReservedNames.Contains(Path.GetFileNameWithoutExtension(full).TrimEnd(' ', '.'))) return false;
+            try
+            {
+                if (new DriveInfo(Path.GetPathRoot(full)!).DriveType == DriveType.Network) return false;
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+        }
+        return ImageExtensions.Contains(Path.GetExtension(full));
     }
+
+    private static bool IsSeparator(char c) => c is '\\' or '/';
+
+    private static readonly HashSet<string> ReservedNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    };
 
     private async Task<JsonNode> TranslateAsync(Request request, CancellationToken ct)
     {

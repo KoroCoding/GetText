@@ -33,12 +33,12 @@ Backlog for the "GetText — Next Generation" plan. Read this first in every ses
 
 | ID | Priority | Feature | Status | Files | Tests | Commit | Blocker | Next Action |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| P1-01 | P0 | Public repository privacy & secret audit (all refs, history, media, releases, CI) | IN PROGRESS | docs/security/PUBLIC_AUDIT.md | scan script (local) | | Release assets / Actions logs / artifacts need download or login | finish report |
-| P2-01 | P0 | Plugin package signing (official publisher key, signature in package, verify before "Official/Verified") | NOT STARTED | PluginHost/* | PluginPlatformTests | | key custody decision (user) | design + verification code, test key only |
-| P2-02 | P1 | Developer API hardening review (rate limit, token storage DPAPI/Keychain) | NOT STARTED | DeveloperApi.cs | DeveloperApiTests | | | audit + fixes |
-| P2-03 | P1 | Network egress inventory + UI disclosure | PARTIAL | Settings → Privacy | | | | document every path |
-| P2-04 | P1 | Supply chain: pin Actions to SHA, least-privilege permissions, SBOM, artifact attestation | NOT STARTED | .github/workflows | CI | | needs push to test CI | |
-| P3-01 | P0 | .NET 10 LTS migration (Windows, Mac, SDK, plugins, tests, CI) | NOT STARTED | *.csproj, workflows | all | | .NET 10 SDK on this PC / CI | dedicated branch |
+| P1-01 | P0 | Public repository privacy & secret audit (all refs, history, media, releases, CI) | TESTED | docs/security/PUBLIC_AUDIT.md | full-history scan (local), visual review | 51edb04 | Release assets (download permission) / Actions artifacts+logs (login) | user decision on downloading release assets |
+| P2-01 | P0 | Plugin package signing (official publisher key, signature in package, verify before "Official/Verified") | TESTED | PluginHost/PluginSignature.cs, PluginStore.cs, tools/PluginSign | PluginSignatureTests (6) | 918e2ff | production key not created (user: keygen + GitHub secret, docs/security/PLUGIN_SIGNING.md) | CI on push |
+| P2-02 | P1 | Developer API hardening review (rate limit, token storage DPAPI/Keychain) | TESTED | DeveloperApi.cs | DeveloperApiTests (+9 path cases) | 4391065 | | token kept as user-only file (scripts must read it); documented |
+| P2-03 | P1 | Network egress inventory + UI disclosure | IMPLEMENTED | docs/security/NETWORK.md, Settings → Privacy | | 4391065 | | pip --require-hashes |
+| P2-04 | P1 | Supply chain: pin Actions to SHA, least-privilege permissions, SBOM, artifact attestation | IN PROGRESS | .github/workflows | CI | c85fd4c | SBOM / attestation not yet | CI on push, then SBOM |
+| P3-01 | P0 | .NET 10 LTS migration (Windows, Mac, SDK, plugins, tests, CI) | IMPLEMENTED | *.csproj, workflows, setup/update scripts | CI only (no .NET 10 SDK on this PC) | de2e95f (branch net10) | CI result | push net10 and check CI |
 | P3-02 | P1 | Core-only / Recommended / Custom install | PARTIAL | setup.ps1, SetupDialog | | | | |
 | P3-03 | P1 | Migration tests from old user environments | PARTIAL | SettingsMigrationTests | | | | |
 | P4-01 | P1 | Interactive OCR: select/copy text on the source image, edit, confidence, candidates | NOT STARTED | | | | | |

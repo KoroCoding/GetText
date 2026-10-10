@@ -127,6 +127,9 @@ public sealed class PluginStore
                 var loaded = JsonSerializer.Deserialize<PluginStateFile>(File.ReadAllText(StatePath), Json);
                 if (loaded?.Plugins == null) throw new JsonException("Plugins がありません");
                 loaded.Plugins.RemoveAll(p => !PluginManifests.IsValidId(p.Id) || !SemVersion.TryParse(p.Version, out _));
+                // 前の版では、オンラインの一覧の SHA-256・verified だけで公式・確認済みにしていた。署名で確かめていないものはコミュニティに戻す
+                foreach (var p in loaded.Plugins.Where(p => p.SignedBy == null && p.Source != PluginSource.Bundled && p.Trust != PluginTrust.Community))
+                    p.Trust = PluginTrust.Community;
                 _state = loaded;
             }
             catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException)
@@ -332,6 +335,31 @@ public sealed class PluginStore
     /// </summary>
     public PluginManifest InstallFromFile(string package, string? expectedSha256, PluginTrust trust, PluginSource source,
         string? expectedId = null, SemVersion? expectedVersion = null, SemVersion? hostVersion = null, string? platform = null)
+    {
+        // パッケージは 1 回だけ読んで写しを作り、SHA-256・展開・署名の確認はすべて写しで行う
+        // (読むたびに中身を変えられる場所 (ネットワークの共有など) から入れても、確かめた物と入れる物を同じにする)
+        Directory.CreateDirectory(Staging);
+        var snapshot = Path.Combine(Staging, Guid.NewGuid().ToString("N") + ".gtplugin");
+        try
+        {
+            File.Copy(package, snapshot);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new PluginPackageException("パッケージを読めませんでした: " + ex.Message, ex);
+        }
+        try
+        {
+            return InstallFromSnapshot(snapshot, expectedSha256, trust, source, expectedId, expectedVersion, hostVersion, platform);
+        }
+        finally
+        {
+            try { File.Delete(snapshot); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+    }
+
+    private PluginManifest InstallFromSnapshot(string package, string? expectedSha256, PluginTrust trust, PluginSource source,
+        string? expectedId, SemVersion? expectedVersion, SemVersion? hostVersion, string? platform)
     {
         var sha = PluginPackages.Sha256(package);
         if (expectedSha256 != null && !string.Equals(sha, expectedSha256.Trim(), StringComparison.OrdinalIgnoreCase))
