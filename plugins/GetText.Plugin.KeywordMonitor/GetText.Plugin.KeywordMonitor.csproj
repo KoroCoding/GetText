@@ -2,7 +2,7 @@
 
   <!-- キーワードの見張り (公式の拡張機能)。読み取った文字に決めた言葉が出たら知らせる。Windows・Mac で同じもの。 -->
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>GetText.Plugins.KeywordMonitor</RootNamespace>

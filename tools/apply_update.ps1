@@ -11,7 +11,7 @@ function Test-GetTextRoot($dir) {
 }
 
 function Find-GetText {
-    # セットアップが作ったショートカット: <GetText>\bin\Release\net9.0-...\GetText.exe
+    # セットアップが作ったショートカット: <GetText>\bin\Release\net<版>-...\GetText.exe
     $shell = New-Object -ComObject WScript.Shell
     # (環境によってはフォルダーの場所が空で返るので、空のものは飛ばす)
     $dirs = @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs')) | Where-Object { $_ }

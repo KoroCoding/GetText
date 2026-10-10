@@ -2,7 +2,7 @@
 
   <!-- 文書の文字の読み取り (公式の拡張機能)。PDF・画像のファイルの文字を読み、TXT・Markdown・JSON にする。Windows・Mac で同じもの。外部の部品なし。 -->
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>GetText.Plugins.DocumentOcr</RootNamespace>

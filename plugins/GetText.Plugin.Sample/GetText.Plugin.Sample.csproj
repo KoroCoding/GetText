@@ -2,7 +2,7 @@
 
   <!-- 見本の拡張機能 (docs/plugins/development.md)。機能のタイル・コマンド・設定・知らせを登録するだけ。 -->
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>GetText.Plugins.Sample</RootNamespace>

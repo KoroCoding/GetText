@@ -2,7 +2,7 @@
   <!-- 拡張機能のパッケージ (.gtplugin) に署名する道具 (開発元が CI で使う)。検証の処理は GetText と同じファイルを使う -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>GetText</RootNamespace>

@@ -2,7 +2,7 @@
 
   <!-- スライドの記録 (公式の拡張機能)。画面が止まった新しいスライドを残し、PPTX にまとめる。Windows・Mac で同じもの。外部の部品なし。 -->
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>GetText.Plugins.Presentation</RootNamespace>

@@ -2,7 +2,7 @@
 
   <!-- 読み取りの履歴 (公式の拡張機能)。読み取った文字をこの PC に保存して探せるようにする (既定は保存しない)。Windows・Mac で同じもの。 -->
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>GetText.Plugins.History</RootNamespace>

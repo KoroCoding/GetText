@@ -2,7 +2,7 @@
 
   <!-- 単体テスト用: わざと問題を起こす拡張機能 (データのフォルダの mode.txt で起こす問題を選ぶ)。配布しない。 -->
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <EnableDynamicLoading>true</EnableDynamicLoading>

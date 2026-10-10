@@ -6,7 +6,7 @@ name: Windows
 
 on:
   push:
-    branches: [main, plugin-platform-rc, next-gen]
+    branches: [main, plugin-platform-rc, next-gen, net10]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -36,7 +36,7 @@ jobs:
 
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: '10.0.x'
 
       - name: 単体テスト
         shell: pwsh

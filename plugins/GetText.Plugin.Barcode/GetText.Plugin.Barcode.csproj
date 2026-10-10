@@ -3,7 +3,7 @@
   <!-- QR コード・バーコードを読む (公式の拡張機能)。Windows・Mac で同じもの。
        Windows には画像から QR コードを読む標準の部品が無いので、この拡張機能の中だけで ZXing.Net (Apache-2.0・.NET だけで動く) を使う。 -->
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>GetText.Plugins.Barcode</RootNamespace>

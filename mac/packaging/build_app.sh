@@ -1,5 +1,5 @@
 #!/bin/bash
-# GetText.app (Mac 版) を作る。Mac で実行する (Xcode のコマンドラインツールと .NET 9 SDK が必要)。
+# GetText.app (Mac 版) を作る。Mac で実行する (Xcode のコマンドラインツールと .NET 10 SDK が必要)。
 # 使い方: bash build_app.sh <出力フォルダ> [arm64|x64]   (省略すると、この Mac の種類)
 # 出力: <出力フォルダ>/GetText.app と GetText-mac-<arm64|x64>.zip
 #   GetText.app/Contents/MacOS      GetText (アプリ本体) と GetTextHelper (Mac の機能を受け持つ補助プログラム)

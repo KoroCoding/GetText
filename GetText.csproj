@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
@@ -17,7 +17,7 @@
     <AssemblyTitle>GetText</AssemblyTitle>
     <Description>画面の文字の読み取り・翻訳、会議の議事録、画面の録画</Description>
     <Copyright>Copyright (C) 2026 KoroCoding. GPL-3.0-or-later.</Copyright>
-    <!-- Fluent テーマ (ThemeMode) は .NET 9 では試験的機能扱い -->
+    <!-- Fluent テーマ (ThemeMode) は試験的機能扱い (WPF0001) -->
     <NoWarn>$(NoWarn);WPF0001</NoWarn>
   </PropertyGroup>
 
@@ -50,7 +50,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
   </ItemGroup>
 
   <ItemGroup>

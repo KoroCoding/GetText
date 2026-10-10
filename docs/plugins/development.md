@@ -7,7 +7,7 @@
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <EnableDynamicLoading>true</EnableDynamicLoading>
@@ -23,7 +23,7 @@
 </Project>
 ```
 
-- Windows・Mac の両方で動かすなら `net9.0` (OS に依存しない) にし、`plugin.json` の `platforms` を `["any"]` にします。
+- Windows・Mac の両方で動かすなら `net10.0` (OS に依存しない。.NET 9 向けに作った拡張機能もそのまま読み込める) にし、`plugin.json` の `platforms` を `["any"]` にします。
 - WPF・Avalonia などの UI の部品は参照しません (画面は GetText が描く)。
 
 ## 2. 入口 (IGetTextPlugin)

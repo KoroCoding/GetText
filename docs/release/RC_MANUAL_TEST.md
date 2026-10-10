@@ -103,7 +103,7 @@ FAIL が出た項目だけ、次の順に進めます (新しい機能・見た�
 ### P3. 拡張機能のテスト用のパッケージ (v1・v2・壊れた v3)
 
 項目 12〜17 で使います。見本の拡張機能 (`gettext.sample`。配布物には同梱しない) から作ります。
-GetText のソースのフォルダで、Windows PowerShell で実行します (.NET 9 SDK が必要):
+GetText のソースのフォルダで、Windows PowerShell で実行します (.NET 10 SDK が必要):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\make_plugins.ps1 -Out rc-test\plugins

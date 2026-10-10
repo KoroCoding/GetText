@@ -1,5 +1,5 @@
 ﻿# GetText のセットアップ (別の PC で使うとき、最初に 1 回だけ setup.bat から実行する)
-#  1. .NET 9 SDK と Python 3.11 が無ければ winget でインストールする
+#  1. .NET 10 SDK と Python 3.11 が無ければ winget でインストールする
 #  2. GetText をビルドする
 #  3. AI 機能 (AI OCR・オフライン翻訳・議事録) の Python 環境とモデルを用意する (offline\setup_offline.ps1)
 #  4. デスクトップとスタートメニューにショートカットを作る
@@ -22,7 +22,7 @@ $here = $PSScriptRoot
 # ビルド済みの配布版 (GetText_配布版.zip) は、このフォルダに GetText.exe があり、ソース (GetText.csproj) は無い。
 # そのときは .NET SDK もビルドも要らない (アプリに .NET が入っている)
 $prebuilt = (Test-Path -LiteralPath (Join-Path $here 'GetText.exe')) -and -not (Test-Path -LiteralPath (Join-Path $here 'GetText.csproj'))
-$exe = if ($prebuilt) { Join-Path $here 'GetText.exe' } else { Join-Path $here 'bin\Release\net9.0-windows10.0.19041.0\GetText.exe' }
+$exe = if ($prebuilt) { Join-Path $here 'GetText.exe' } else { Join-Path $here 'bin\Release\net10.0-windows10.0.19041.0\GetText.exe' }
 $log = Join-Path $here 'setup.log'
 try { Start-Transcript -Path $log -Force | Out-Null } catch { }
 
@@ -136,8 +136,8 @@ try {
         Read-Host | Out-Null
     }
 
-    # ── 1. .NET 9 SDK と Python 3.11
-    Step $(if ($prebuilt) { '1/4 必要なソフト (Python 3.11) を確認しています (ビルド済みの配布版なので .NET は不要)' } else { '1/4 必要なソフト (.NET 9 SDK / Python 3.11) を確認しています' })
+    # ── 1. .NET 10 SDK と Python 3.11
+    Step $(if ($prebuilt) { '1/4 必要なソフト (Python 3.11) を確認しています (ビルド済みの配布版なので .NET は不要)' } else { '1/4 必要なソフト (.NET 10 SDK / Python 3.11) を確認しています' })
     Refresh-Path
     $hasDotnet = $prebuilt
     if ($prebuilt) {
@@ -145,7 +145,7 @@ try {
         Get-ChildItem -LiteralPath $here -Recurse -File | Unblock-File -ErrorAction SilentlyContinue
     }
     elseif (Get-Command dotnet -ErrorAction SilentlyContinue) {
-        $hasDotnet = [bool]((Invoke-Native { & dotnet --list-sdks 2>$null }) -match '^9\.')
+        $hasDotnet = [bool]((Invoke-Native { & dotnet --list-sdks 2>$null }) -match '^1\d\.')
     }
     function Find-Python {
         if (Get-Command py -ErrorAction SilentlyContinue) {
@@ -159,20 +159,20 @@ try {
     }
     $python = Find-Python
     $missing = @()
-    if (-not $hasDotnet) { $missing += '.NET 9 SDK (Microsoft.DotNet.SDK.9)' }
+    if (-not $hasDotnet) { $missing += '.NET 10 SDK (Microsoft.DotNet.SDK.10)' }
     if (-not $python) { $missing += 'Python 3.11 (Python.Python.3.11)' }
     if ($missing.Count -gt 0) {
         if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
             throw ("次のソフトを手動でインストールしてから、もう一度実行してください: " + ($missing -join '、') +
-                "`n  .NET 9 SDK: https://dotnet.microsoft.com/download/dotnet/9.0`n  Python 3.11: https://www.python.org/downloads/ (「Add python.exe to PATH」にチェック)")
+                "`n  .NET 10 SDK: https://dotnet.microsoft.com/download/dotnet/10.0`n  Python 3.11: https://www.python.org/downloads/ (「Add python.exe to PATH」にチェック)")
         }
         Write-Host ('  次のソフトを winget でインストールします: ' + ($missing -join '、'))
         Write-Host '  (インストールすると、それぞれのソフトの利用条件に同意したことになります)'
         if (-not (Confirm-Step '  インストールしますか？')) { throw 'インストールを中止しました。' }
         if (-not $hasDotnet) {
-            Invoke-Native { & winget install --id Microsoft.DotNet.SDK.9 -e --source winget --silent --accept-package-agreements --accept-source-agreements }
+            Invoke-Native { & winget install --id Microsoft.DotNet.SDK.10 -e --source winget --silent --accept-package-agreements --accept-source-agreements }
             Refresh-Path
-            if (-not ((Invoke-Native { & dotnet --list-sdks 2>$null }) -match '^9\.')) { throw '.NET 9 SDK をインストールできませんでした。' }
+            if (-not ((Invoke-Native { & dotnet --list-sdks 2>$null }) -match '^1\d\.')) { throw '.NET 10 SDK をインストールできませんでした。' }
         }
         if (-not $python) {
             Invoke-Native { & winget install --id Python.Python.3.11 -e --source winget --scope user --silent --accept-package-agreements --accept-source-agreements }
@@ -181,7 +181,7 @@ try {
             if (-not $python) { throw 'Python 3.11 をインストールできませんでした。' }
         }
     }
-    if (-not $prebuilt) { Ok ".NET SDK: $((& dotnet --list-sdks | Select-String '^9\.' | Select-Object -First 1).ToString().Split(' ')[0])" }
+    if (-not $prebuilt) { Ok ".NET SDK: $((& dotnet --list-sdks | Select-String '^1\d\.' | Select-Object -First 1).ToString().Split(' ')[0])" }
     Ok "Python: $python"
 
     # ── 2. ビルド

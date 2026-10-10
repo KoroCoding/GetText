@@ -23,7 +23,7 @@ function Test-PrebuiltRoot($dir) {
 function Test-GetTextRoot($dir) { return (Test-SourceRoot $dir) -or (Test-PrebuiltRoot $dir) }
 
 function Find-GetText {
-    # セットアップが作ったショートカット: <GetText>\bin\Release\net9.0-...\GetText.exe
+    # セットアップが作ったショートカット: <GetText>\bin\Release\net<版>-...\GetText.exe
     $shell = New-Object -ComObject WScript.Shell
     # (環境によってはフォルダーの場所が空で返るので、空のものは飛ばす)
     $dirs = @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs')) | Where-Object { $_ }
@@ -112,13 +112,28 @@ try {
     }
     else {
         if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw '.NET SDK が見つかりません。先に setup.bat を実行してください。' }
-        $exe = Join-Path $root 'bin\Release\net9.0-windows10.0.19041.0\GetText.exe'
+        $exe = Join-Path $root 'bin\Release\net10.0-windows10.0.19041.0\GetText.exe'
         Push-Location $root
         # ZIP から上書きしたファイルは日時が古いことがあり、差分だけのビルドだと反映されないので、すべて作り直す
         Invoke-Native { & dotnet build GetText.csproj -c Release --nologo -v q --no-incremental }
         $code = $LASTEXITCODE
         Pop-Location
         if ($code -ne 0 -or -not (Test-Path -LiteralPath $exe)) { throw 'ビルドに失敗しました (上のエラーを確認してください)。' }
+        # .NET の版が変わると実行ファイルの場所が変わる (net9.0-… → net10.0-…): 古い場所を指すショートカットを新しい場所に向け直す
+        $shell = New-Object -ComObject WScript.Shell
+        foreach ($dir in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs')) | Where-Object { $_ }) {
+            $path = Join-Path $dir 'GetText.lnk'
+            if (-not (Test-Path -LiteralPath $path)) { continue }
+            $lnk = $shell.CreateShortcut($path)
+            $old = $lnk.TargetPath
+            if ($old -and $old -ne $exe -and $old.StartsWith((Join-Path $root 'bin\Release\'), [StringComparison]::OrdinalIgnoreCase)) {
+                $lnk.TargetPath = $exe
+                $lnk.WorkingDirectory = Split-Path $exe
+                $lnk.IconLocation = "$exe,0"
+                $lnk.Save()
+                Write-Host "  ショートカットを新しい場所に向け直しました: $path"
+            }
+        }
         # 議事録・翻訳・読み取りの処理 (Python) は、日時にかかわらずアプリのフォルダーへ写す
         $dest = Join-Path (Split-Path $exe) 'offline'
         Get-ChildItem -LiteralPath (Join-Path $root 'offline') -File |

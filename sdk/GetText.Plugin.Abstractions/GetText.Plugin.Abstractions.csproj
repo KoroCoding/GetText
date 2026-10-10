@@ -6,7 +6,7 @@
     Plugin API v1。互換性を壊す変更をするときは ApiVersion を上げる。
   -->
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>GetText.Plugins</RootNamespace>

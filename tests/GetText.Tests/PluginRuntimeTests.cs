@@ -55,7 +55,7 @@ public class PluginRuntimeTests : IDisposable
     {
         var project = Path.Combine(RepoRoot(), projectDir);
         var bin = new[] { "Debug", "Release" }
-            .Select(c => Path.Combine(project, "bin", c, "net9.0"))
+            .Select(c => Path.Combine(project, "bin", c, "net10.0"))
             .Where(d => File.Exists(Path.Combine(d, dll)))
             .OrderByDescending(d => File.GetLastWriteTimeUtc(Path.Combine(d, dll)))
             .FirstOrDefault() ?? throw new InvalidOperationException($"{dll} がビルドされていません ({projectDir})");

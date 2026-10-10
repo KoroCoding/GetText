@@ -91,7 +91,7 @@ GetText の本体は小さく保ち、必要な機能だけを **拡張機能** 
 - GetText の中からも、設定 → モデルとセットアップ → 「セットアップを実行」で、入れる機能をおすすめ付きで選んでセットアップできます (セットアップの間は GetText を閉じます)。AI の機能が入っていないときは、メイン画面の上に案内が出ます。
 
 `setup.bat` がすること:
-- .NET 9 SDK と Python 3.11 が無ければ **winget** でインストールする (それぞれの利用条件に同意したことになるので、実行前に確認を求めます)
+- .NET 10 SDK と Python 3.11 が無ければ **winget** でインストールする (それぞれの利用条件に同意したことになるので、実行前に確認を求めます)
 - GetText をビルドする (`bin\Release\...\GetText.exe`)
 - AI 機能の Python 環境 (`%LOCALAPPDATA%\GetText\offline`) を作り、モデルをダウンロードする (`offline\setup_offline.ps1`)
 - NVIDIA の GPU があるのに CUDA Toolkit が無い PC には、GPU 用の cuBLAS (pip 版、約 0.6GB) を入れる。GPU が無い PC でも、議事録は速い音声認識 (軽さ優先) で記録に遅れずに文字にできます
@@ -126,12 +126,12 @@ Windows 版との違い:
 
 確かめたこと (GitHub の Mac・macOS 15): GetText.app のビルド (Apple シリコン・Intel)、補助プログラム (Vision の文字認識・キーチェーン・ショートカット・画面と音の取り込み)、議事録の画面の操作 (28 項目)、実際の画面での起動と枠の中の取り込み (文字の読み取り自体は補助プログラムの確認で、描いた日本語と英語を読めることを確認)、Intel 版の起動 (Rosetta)、議事録の通しの確認 (架空の会議で文字の誤り率 1.6%・話者の聞き分け 100%)、実際に再生した音を取り込んで議事録にする確認 (誤り率 1.6%)。会議アプリ (Zoom・Teams など) での実際の通話と、マイクの音は確かめていません。
 
-作り方 (Mac で): `bash mac/packaging/build_app.sh <出力フォルダ> [arm64|x64]` (Xcode のコマンドラインツールと .NET 9 SDK が必要)。GitHub に push すると、`.github/workflows/mac.yml` が GitHub の Mac で GetText.app を作り、補助プログラム・画面の操作・実際の画面での起動を確かめて、結果と ZIP を `ci/mac-results` ブランチに置きます (手動で実行して「full」をオンにすると、議事録の通しの確認もします)。
+作り方 (Mac で): `bash mac/packaging/build_app.sh <出力フォルダ> [arm64|x64]` (Xcode のコマンドラインツールと .NET 10 SDK が必要)。GitHub に push すると、`.github/workflows/mac.yml` が GitHub の Mac で GetText.app を作り、補助プログラム・画面の操作・実際の画面での起動を確かめて、結果と ZIP を `ci/mac-results` ブランチに置きます (手動で実行して「full」をオンにすると、議事録の通しの確認もします)。
 
 ## 必要なもの
 
 - Windows 10 2004 以降 / Windows 11
-- .NET 9 SDK（ビルド用）
+- .NET 10 SDK（ビルド用）
 - OCR 言語パック（日本語なら「設定 > 時刻と言語 > 言語と地域 > 日本語 > 言語のオプション > 光学式文字認識」）
   - 英語の画面を読むことが多いなら英語の OCR も入れると精度が上がります（言語に「自動 (日本語+英語)」が出ます）。管理者の PowerShell で:
     `Add-WindowsCapability -Online -Name "Language.OCR~~~en-US~0.0.1.0"`
